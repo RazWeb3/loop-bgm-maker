@@ -9,7 +9,7 @@ const m = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!m) { console.error("core script not found"); process.exit(1); }
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(m[1] + "\n;globalThis.__api={generateScore,validateScore,expectedSeconds,TASTES,scoreToMidi,regenerateTrack};", ctx);
+vm.runInContext(m[1] + "\n;globalThis.__api={generateScore,validateScore,expectedSeconds,TASTES,scoreToMidi,regenerateTrack};globalThis.__api2={SE_RECIPES};", ctx);
 const { generateScore, validateScore, expectedSeconds, TASTES, scoreToMidi, regenerateTrack } = ctx.__api;
 
 let pass = 0, fail = 0;
@@ -102,6 +102,60 @@ for (const mo of modes) {
       for(const other of s0.tracks){ if(other.id!==tr.id)
         ok(JSON.stringify(s1.tracks.find(x=>x.id===other.id).notes)===JSON.stringify(other.notes), `${cfg.mode} regen ${tr.id} keeps ${other.id}`); }
     }
+  }
+}
+
+// 3) T7: sound-effect recipes (instruction §8 T7)
+// duration in category range, rendered frequencies in audible UI range,
+// simulated synthesis is not silent, has no leading silence, and does not clip.
+{
+  const api2 = ctx.__api2;
+  const { SE_RECIPES } = api2;
+  const cats = Object.keys(SE_RECIPES);
+  ok(cats.length === 8, "T7: 8 SE categories exist");
+  const sr = 44100;
+  const synth = (r) => {
+    const n = Math.ceil(sr * r.dur), buf = new Float32Array(n);
+    if (r.type === "noise") { let seed = 42; for (let i = 0; i < n; i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; buf[i] = ((seed / 0x40000000) - 1) * 0.8 * Math.exp(-3 * i / n); } }
+    else if (r.type === "sweep") { for (let i = 0; i < n; i++) { const t = i / sr, f = r.from * Math.pow(r.to / r.from, t / r.dur); const ph = 2 * Math.PI * f * t; buf[i] = (Math.sin(ph) >= 0 ? 1 : -1) * 0.4 * Math.exp(-3 * i / n); } }
+    else { const step = r.dur / r.notes.length; r.notes.forEach((f, idx) => { const s0 = Math.floor(idx * step * sr), s1 = Math.floor((idx + 1) * step * sr); for (let i = s0; i < s1 && i < n; i++) { const ph = 2 * Math.PI * f * (i - s0) / sr; buf[i] = (Math.sin(ph) >= 0 ? 1 : -1) * 0.35 * Math.exp(-3 * (i - s0) / (s1 - s0)); } }); }
+    return buf;
+  };
+  for (const [name, r] of Object.entries(SE_RECIPES)) {
+    ok(r.dur >= 0.05 && r.dur <= 0.6, `T7 ${name}: duration ${r.dur}s within UI range`);
+    if (r.type === "sweep") ok(r.from >= 80 && r.from <= 4000 && r.to >= 80 && r.to <= 4000, `T7 ${name}: sweep freqs in range`);
+    if (r.type === "arp") {
+      ok(r.notes.length >= 2 && r.notes.length <= 6, `T7 ${name}: arp note count`);
+      ok(r.notes.every(f => f >= 150 && f <= 4000), `T7 ${name}: arp freqs (Hz) in range`);
+      ok(r.notes.every((f, i) => i === 0 || f > r.notes[i - 1]), `T7 ${name}: arp ascending`);
+    }
+    const buf = synth(r);
+    let peak = 0, sum = 0; for (const v of buf) { const a = Math.abs(v); if (a > peak) peak = a; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length);
+    let head = 0, hn = Math.floor(sr * 0.005); for (let i = 0; i < hn; i++) head += buf[i] * buf[i];
+    ok(peak <= 1.0 && peak >= 0.2, `T7 ${name}: peak ${peak.toFixed(2)} normalized, not silent`);
+    ok(rms > 0.03, `T7 ${name}: RMS ${rms.toFixed(3)} not silent`);
+    ok(Math.sqrt(head / hn) > 0.05, `T7 ${name}: no leading silence`);
+  }
+  // regression guard: renderSE must treat recipe arp notes as Hz, not MIDI numbers
+  const htmlAll = html;
+  ok(!/renderSE[\s\S]*?Math\.pow\(2,\(m-69\)\/12\)/.test(htmlAll.slice(htmlAll.indexOf("function renderSE"), htmlAll.indexOf("function renderSE") + 1600)), "T7: renderSE arp uses Hz directly");
+}
+
+// 4) T8 (automatable subset, instruction §10.6): no trademark / work names in the
+// app's display strings; the shipped README carries the §10.4 notice and the contact window.
+{
+  const tm = /ゲームボーイ|ファミコン|Game ?Boy|Nintendo|任天堂/;
+  ok(!tm.test(html), "T8: no trademark strings anywhere in the app HTML");
+  ok(!/商用利用自由|完全にフリー|権利フリー/.test(html), "T8: no overclaim wording in the app");
+  let readme = "";
+  for (const cand of ["../repo/loop-bgm-maker/README.md", "../README.md"]) {
+    try { readme = readFileSync(new URL(cand, import.meta.url), "utf8"); break; } catch { /* try next */ }
+  }
+  if (readme) {
+    ok(readme.includes("権利を主張しません") && readme.includes("保証しません"), "T8: README carries the §10.4 notice");
+    ok(readme.includes("github.com/RazWeb3/loop-bgm-maker/issues"), "T8: README carries the contact window (Issues)");
+    ok(!tm.test(readme), "T8: no trademark strings in README");
   }
 }
 console.log(`\n${pass} passed, ${fail} failed`);

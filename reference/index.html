@@ -52,7 +52,7 @@
     <div id="retroOpts" style="display:none">
       <label class="chk"><input type="checkbox" id="expTri"> 拡張1：三角波ベース（CH3を切替）</label>
       <label class="chk"><input type="checkbox" id="expSmp"> 拡張2：サンプルドラム（1ch追加）</label>
-      <div class="meta" id="retroState">構成：Game Boy方式 4ch</div>
+      <div class="meta" id="retroState">構成：レトロ4ch（標準構成）</div>
     </div>
     <label>テイスト</label>
     <select id="taste"></select>
@@ -648,7 +648,7 @@ async function renderSE(cat){
     const og=ctx.createGain(); og.gain.setValueAtTime(.4,0); og.gain.exponentialRampToValueAtTime(.001,dur);
     o.connect(og); og.connect(g); o.start(0); o.stop(dur); }
   else { const step=dur/r.notes.length; r.notes.forEach((m,i)=>{ const o=ctx.createOscillator(); o.type="square";
-    o.frequency.value=440*Math.pow(2,(m-69)/12); const og=ctx.createGain(); const t0=i*step;
+    o.frequency.value=m; const og=ctx.createGain(); const t0=i*step;
     og.gain.setValueAtTime(.35,t0); og.gain.exponentialRampToValueAtTime(.001,t0+step);
     o.connect(og); og.connect(g); o.start(t0); o.stop(t0+step); }); }
   return await ctx.startRendering();
@@ -660,7 +660,7 @@ tasteSel.value="lofi";
 tasteSel.onchange=()=>{ $("bpm").value=TASTES[tasteSel.value].bpm; };
 $("mode").onchange=()=>{ const retro=$("mode").value==="retro"; $("retroOpts").style.display=retro?"":"none"; };
 function retroStateUpdate(){ const tri=$("expTri").checked, smp=$("expSmp").checked;
-  $("retroState").textContent = "構成：" + (!tri&&!smp ? "Game Boy方式 4ch" : (tri&&smp ? "ファミコン相当 5ch（拡張1+2）" : tri ? "4ch＋三角波ベース" : "4ch＋サンプルドラム")); }
+  $("retroState").textContent = "構成：" + (!tri&&!smp ? "レトロ4ch（標準構成）" : (tri&&smp ? "5ch（拡張1＋2）" : tri ? "4ch＋三角波ベース" : "4ch＋サンプルドラム")); }
 $("expTri").onchange=retroStateUpdate; $("expSmp").onchange=retroStateUpdate;
 $("genBtn").onclick=doGenerate;
 $("playBtn").onclick=()=>{ const ctx=ensureCtx(); ctx.resume(); stopPlay();
