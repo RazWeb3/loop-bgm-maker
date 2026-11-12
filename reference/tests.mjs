@@ -9,8 +9,8 @@ const m = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!m) { console.error("core script not found"); process.exit(1); }
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(m[1] + "\n;globalThis.__api={generateScore,validateScore,expectedSeconds,TASTES,scoreToMidi};", ctx);
-const { generateScore, validateScore, expectedSeconds, TASTES, scoreToMidi } = ctx.__api;
+vm.runInContext(m[1] + "\n;globalThis.__api={generateScore,validateScore,expectedSeconds,TASTES,scoreToMidi,regenerateTrack};", ctx);
+const { generateScore, validateScore, expectedSeconds, TASTES, scoreToMidi, regenerateTrack } = ctx.__api;
 
 let pass = 0, fail = 0;
 const ok = (cond, name) => { if (cond) pass++; else { fail++; console.log("FAIL:", name); } };
@@ -68,6 +68,25 @@ for (const mo of modes) {
   ok(eot === ntrk, "MIDI end-of-track per track");
   const totalNotes = s.tracks.reduce((a, t) => a + t.notes.length, 0);
   ok(mid.length > totalNotes * 4, "MIDI size consistent with note count");
+}
+// 5) stage 3: per-track regeneration keeps other tracks + chords identical, stays valid
+{
+  const baseOpts = { theme: "再生成", mode: "standard", taste: "pop", bpm: 100, bars: 8, key: "C:major", variant: 0, trackVariants: {} };
+  const s0 = generateScore(baseOpts);
+  const s1 = regenerateTrack(s0, { ...baseOpts, trackVariants: { melody: 1 } }, "melody");
+  ok(JSON.stringify(s1.chords) === JSON.stringify(s0.chords), "regen keeps chords");
+  for (const tr of s0.tracks) {
+    const other = s1.tracks.find(t => t.id === tr.id);
+    if (tr.id === "melody") ok(JSON.stringify(other.notes) !== JSON.stringify(tr.notes), "regen changes melody");
+    else ok(JSON.stringify(other.notes) === JSON.stringify(tr.notes), `regen keeps ${tr.id}`);
+  }
+  ok(validateScore(s1).every(c => c.ok), "regen result still valid");
+  // retro: regenerated ch1 must remain monophonic and valid
+  const rOpts = { theme: "再生成", mode: "retro", taste: "battle", bpm: 140, bars: 8, key: "A:minor", variant: 0, trackVariants: {}, expTri: true, expSmp: true };
+  const r0 = generateScore(rOpts);
+  const r1 = regenerateTrack(r0, { ...rOpts, trackVariants: { ch1: 2 } }, "ch1");
+  ok(validateScore(r1).every(c => c.ok), "retro regen valid (mono + constraints)");
+  ok(JSON.stringify(r1.tracks.find(t => t.id === "ch3").notes) === JSON.stringify(r0.tracks.find(t => t.id === "ch3").notes), "retro regen keeps ch3");
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

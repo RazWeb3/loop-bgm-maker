@@ -79,6 +79,12 @@
       <button id="saveBtn" class="sub" disabled>ギャラリーに保存</button>
     </div>
     <div class="meta">MP3書き出しは未実装です（エンコーダ依存のライセンス確認が §10 の公開前項目のため、判断を公開段に残しています）。</div>
+    <h2 style="margin-top:20px">生成後の調整</h2>
+    <div class="row">
+      <div><label>BPM（再生・書き出しに反映）</label><input id="adjBpm" type="number" min="40" max="200" value="100"></div>
+    </div>
+    <div class="btns"><button id="adjBpmBtn" class="sub" disabled>BPMを反映する</button></div>
+    <div class="meta">パートごとの作り直しと音量は、右の「パート構成」で行います。音量は譜面データに保存されます。</div>
     <h2 style="margin-top:20px">効果音（同梱・分離可能モジュール）</h2>
     <label>カテゴリ</label>
     <select id="seCat">
@@ -168,109 +174,125 @@ function chordNotes(rootMidi, scaleName, degree, count){
 }
 function scaleTone(rootMidi, scaleName, idx){ const s=SCALES[scaleName]; return rootMidi + s[((idx % s.length)+s.length)%s.length] + 12*Math.floor(idx/s.length); }
 
-function generateScore(opts){
+function buildContext(opts){
   const taste = TASTES[opts.taste];
   const bars = opts.bars, totalSteps = bars * STEPS_PER_BAR;
-  const [rootName, prefScale] = opts.key.split(":");
-  const scaleName = prefScale;
-  const rootMidi = 60 + NOTE_NAMES[rootName]; // melody octave base
-  const seed = hashSeed(opts.theme + "|" + opts.mode + "|" + opts.taste + "|" + opts.bpm + "|" + bars + "|" + (opts.variant||0));
-  const rand = rng(seed);
+  const [rootName, scaleName] = opts.key.split(":");
+  const rootMidi = 60 + NOTE_NAMES[rootName];
   const chords = [];
-  for(let b=0;b<bars;b++){ const deg = taste.prog[b % taste.prog.length]; chords.push({bar:b, degree:deg}); }
-  const tracks = [];
-  const density = taste.density;
-
-  function melodyTrack(id, instrument, baseMidi){
-    const notes=[]; let degIdx = 14; // scale-degree position (2 octaves up from base degree 0)
-    for(let s=0;s<totalSteps;s++){
-      const bar = Math.floor(s/STEPS_PER_BAR);
-      const deg = chords[bar].degree;
-      const onBeat = s % 4 === 0;
-      const p = onBeat ? density+.25 : density*.55;
-      if(rand() < p){
-        if(rand() < .62){ // chord tone
-          const ct = chordNotes(baseMidi, scaleName, deg, 3);
-          const pick = ct[Math.floor(rand()*ct.length)] + 12;
-          notes.push({step:s, midi:pick, len:(rand()<.3?4:2), vel:.65+rand()*.3});
-        } else { // scale walk by degrees (stays in scale and in range)
-          degIdx += (rand()<.5?-1:1) * (rand()<.2?2:1);
-          degIdx = Math.max(7, Math.min(24, degIdx));
-          notes.push({step:s, midi:scaleTone(baseMidi, scaleName, degIdx), len:2, vel:.55+rand()*.3});
-        }
+  for(let b=0;b<bars;b++) chords.push({bar:b, degree:taste.prog[b % taste.prog.length]});
+  const baseSeedStr = opts.theme + "|" + opts.mode + "|" + opts.taste + "|" + opts.bpm + "|" + bars + "|" + (opts.variant||0);
+  return { taste, bars, totalSteps, scaleName, rootName, rootMidi, chords, baseSeedStr, density:taste.density };
+}
+function trackRng(ctx, opts, trackId){
+  const tv = (opts.trackVariants && opts.trackVariants[trackId]) || 0;
+  return rng(hashSeed(ctx.baseSeedStr + "|track:" + trackId + "|" + tv));
+}
+function melodyNotes(ctx, rand, baseMidi){
+  const notes=[]; let degIdx = 14;
+  for(let s=0;s<ctx.totalSteps;s++){
+    const deg = ctx.chords[Math.floor(s/STEPS_PER_BAR)].degree;
+    const onBeat = s % 4 === 0;
+    const p = onBeat ? ctx.density+.25 : ctx.density*.55;
+    if(rand() < p){
+      if(rand() < .62){
+        const ct = chordNotes(baseMidi, ctx.scaleName, deg, 3);
+        notes.push({step:s, midi:ct[Math.floor(rand()*ct.length)] + 12, len:(rand()<.3?4:2), vel:.65+rand()*.3});
+      } else {
+        degIdx += (rand()<.5?-1:1) * (rand()<.2?2:1);
+        degIdx = Math.max(7, Math.min(24, degIdx));
+        notes.push({step:s, midi:scaleTone(baseMidi, ctx.scaleName, degIdx), len:2, vel:.55+rand()*.3});
       }
     }
-    return {id, role:"melody", instrument, notes};
   }
-  function bassTrack(id, instrument, baseMidi){
-    const notes=[];
-    for(let b=0;b<bars;b++){
-      const deg = chords[b].degree;
-      const root = chordNotes(baseMidi, scaleName, deg, 3)[0];
-      const fifth = chordNotes(baseMidi, scaleName, deg, 3)[2];
-      const pat = [0,4,8,12];
-      for(const off of pat){ notes.push({step:b*16+off, midi:root, len:3, vel:.8}); }
-      if(rand()<.5) notes.push({step:b*16+14, midi:fifth, len:2, vel:.6});
-    }
-    return {id, role:"bass", instrument, notes};
+  return notes;
+}
+function bassNotes(ctx, rand, baseMidi){
+  const notes=[];
+  for(let b=0;b<ctx.bars;b++){
+    const deg = ctx.chords[b].degree;
+    const root = chordNotes(baseMidi, ctx.scaleName, deg, 3)[0];
+    const fifth = chordNotes(baseMidi, ctx.scaleName, deg, 3)[2];
+    for(const off of [0,4,8,12]) notes.push({step:b*16+off, midi:root, len:3, vel:.8});
+    if(rand()<.5) notes.push({step:b*16+14, midi:fifth, len:2, vel:.6});
   }
-  function drumTrack(id){
-    const notes=[]; // midi 1 = short noise (hat), 2 = long noise (snare-like)
-    for(let s=0;s<totalSteps;s++){
-      if(s%4===2) notes.push({step:s, midi:2, len:2, vel:.8});
-      else if(s%2===0) notes.push({step:s, midi:1, len:1, vel:.5});
-    }
-    return {id, role:"drums", instrument:"noise", notes};
+  return notes;
+}
+function drumNotes(ctx){
+  const notes=[];
+  for(let s=0;s<ctx.totalSteps;s++){
+    if(s%4===2) notes.push({step:s, midi:2, len:2, vel:.8});
+    else if(s%2===0) notes.push({step:s, midi:1, len:1, vel:.5});
   }
-
-  if(opts.mode==="standard"){
-    const chordTr = {id:"chords", role:"chords", instrument:"pad", notes:[]};
-    for(let b=0;b<bars;b++){ for(const m of chordNotes(rootMidi-12, scaleName, chords[b].degree, 4)) chordTr.notes.push({step:b*16, midi:m, len:16, vel:.4}); }
-    tracks.push(melodyTrack("melody","lead",rootMidi));
-    tracks.push(chordTr);
-    tracks.push(bassTrack("bass","synthbass",rootMidi-24));
-    tracks.push(drumTrack("drums"));
+  return notes;
+}
+function trackIdsFor(opts){
+  if(opts.mode==="standard") return ["melody","chords","bass","drums"];
+  if(opts.mode==="retro") return opts.expSmp ? ["ch1","ch2","ch3","ch4","ch5"] : ["ch1","ch2","ch3","ch4"];
+  if(opts.mode==="piano") return ["piano"];
+  if(opts.mode==="ambient") return ["pad","sparse"];
+  return [];
+}
+function buildTrack(ctx, opts, trackId){
+  const R = ctx.rootMidi, S = ctx.scaleName;
+  switch(trackId){
+    case "melody": return {id:"melody", role:"melody", instrument:"lead", notes:melodyNotes(ctx, trackRng(ctx,opts,"melody"), R)};
+    case "chords": { const tr={id:"chords", role:"chords", instrument:"pad", notes:[]};
+      for(let b=0;b<ctx.bars;b++) for(const m of chordNotes(R-12, S, ctx.chords[b].degree, 4)) tr.notes.push({step:b*16, midi:m, len:16, vel:.4});
+      return tr; }
+    case "bass": return {id:"bass", role:"bass", instrument:"synthbass", notes:bassNotes(ctx, trackRng(ctx,opts,"bass"), R-24)};
+    case "drums": return {id:"drums", role:"drums", instrument:"noise", notes:drumNotes(ctx)};
+    case "ch1": { const tr={id:"ch1", role:"melody", instrument:"pulse", duty:.25, notes:melodyNotes(ctx, trackRng(ctx,opts,"ch1"), R)}; return tr; }
+    case "ch2": { const tr={id:"ch2", role:"harmony", instrument:"pulse", duty:.5, notes:[]};
+      for(let b=0;b<ctx.bars;b++){ const ct=chordNotes(R, S, ctx.chords[b].degree, 3);
+        for(let s=0;s<16;s+=2) tr.notes.push({step:b*16+s, midi:ct[(s/2)%3]+12, len:2, vel:.4}); }
+      return tr; }
+    case "ch3": return {id:"ch3", role:"bass", instrument:opts.expTri ? "triangle" : "wave", notes:bassNotes(ctx, trackRng(ctx,opts,"ch3"), R-24)};
+    case "ch4": return {id:"ch4", role:"drums", instrument:"noise", notes:drumNotes(ctx)};
+    case "ch5": { const tr={id:"ch5", role:"sampledrums", instrument:"sample", notes:[]};
+      for(let s=0;s<ctx.totalSteps;s+=8){ tr.notes.push({step:s, midi:1, len:2, vel:.9}); if(s%16===8) tr.notes.push({step:s, midi:2, len:2, vel:.8}); }
+      return tr; }
+    case "piano": { const tr={id:"piano", role:"piano", instrument:"piano", notes:melodyNotes(ctx, trackRng(ctx,opts,"piano"), R)};
+      for(let b=0;b<ctx.bars;b++){ const ct=chordNotes(R-24, S, ctx.chords[b].degree, 3);
+        tr.notes.push({step:b*16, midi:ct[0], len:8, vel:.5},{step:b*16, midi:ct[1], len:8, vel:.42},{step:b*16+8, midi:ct[2], len:6, vel:.45}); }
+      tr.notes.sort((a,b2)=>a.step-b2.step); return tr; }
+    case "pad": { const tr={id:"pad", role:"pad", instrument:"pad", notes:[]};
+      for(let b=0;b<ctx.bars;b+=2) for(const m of chordNotes(R-12, S, ctx.chords[b].degree, 4)) tr.notes.push({step:b*16, midi:m, len:32, vel:.35});
+      return tr; }
+    case "sparse": { const tr={id:"sparse", role:"melody", instrument:"bell", notes:melodyNotes(ctx, trackRng(ctx,opts,"sparse"), R)};
+      tr.notes = tr.notes.filter((_,i)=>i%3===0).map(n=>({...n, len:8, vel:n.vel*.7})); return tr; }
   }
-  if(opts.mode==="retro"){
-    const mel = melodyTrack("ch1","pulse",rootMidi); mel.duty=.25;
-    const arp = {id:"ch2", role:"harmony", instrument:"pulse", duty:.5, notes:[]};
-    for(let b=0;b<bars;b++){ const ct=chordNotes(rootMidi, scaleName, chords[b].degree,3);
-      for(let s=0;s<16;s+=2){ arp.notes.push({step:b*16+s, midi:ct[(s/2)%3]+12, len:2, vel:.4}); } }
-    const bass = bassTrack("ch3", opts.expTri ? "triangle" : "wave", rootMidi-24);
-    for(const tr of [mel, arp, bass]){ // retro channels are monophonic: truncate overlaps
-      tr.notes.sort((a,b)=>a.step-b.step);
-      for(let i=0;i<tr.notes.length-1;i++){ const nxt=tr.notes[i+1].step;
-        if(tr.notes[i].step + tr.notes[i].len > nxt) tr.notes[i].len = Math.max(1, nxt - tr.notes[i].step); }
-    }
-    tracks.push(mel, arp, bass, drumTrack("ch4"));
-    if(opts.expSmp){
-      const smp={id:"ch5", role:"sampledrums", instrument:"sample", notes:[]};
-      for(let s=0;s<totalSteps;s+=8){ smp.notes.push({step:s, midi:1, len:2, vel:.9}); if(s%16===8) smp.notes.push({step:s, midi:2, len:2, vel:.8}); }
-      tracks.push(smp);
-    }
+  throw new Error("unknown track " + trackId);
+}
+function enforceMono(tracks){
+  for(const tr of tracks){
+    tr.notes.sort((a,b)=>a.step-b.step);
+    for(let i=0;i<tr.notes.length-1;i++){ const nxt=tr.notes[i+1].step;
+      if(tr.notes[i].step + tr.notes[i].len > nxt) tr.notes[i].len = Math.max(1, nxt - tr.notes[i].step); }
   }
-  if(opts.mode==="piano"){
-    const tr = melodyTrack("piano","piano",rootMidi);
-    tr.role="piano";
-    for(let b=0;b<bars;b++){ const ct=chordNotes(rootMidi-24, scaleName, chords[b].degree,3);
-      tr.notes.push({step:b*16, midi:ct[0], len:8, vel:.5},{step:b*16, midi:ct[1], len:8, vel:.42},{step:b*16+8, midi:ct[2], len:6, vel:.45}); }
-    tr.notes.sort((a,b2)=>a.step-b2.step);
-    tracks.push(tr);
-  }
-  if(opts.mode==="ambient"){
-    const pad={id:"pad", role:"pad", instrument:"pad", notes:[]};
-    for(let b=0;b<bars;b+=2){ for(const m of chordNotes(rootMidi-12, scaleName, chords[b].degree,4)) pad.notes.push({step:b*16, midi:m, len:32, vel:.35}); }
-    tracks.push(pad);
-    const sparse = melodyTrack("sparse","bell",rootMidi);
-    sparse.notes = sparse.notes.filter((_,i)=>i%3===0).map(n=>({...n, len:8, vel:n.vel*.7}));
-    tracks.push(sparse);
-  }
+}
+function generateScore(opts){
+  const ctx = buildContext(opts);
+  const tracks = trackIdsFor(opts).map(id=>buildTrack(ctx, opts, id));
+  if(opts.mode==="retro") enforceMono(tracks.filter(t=>["ch1","ch2","ch3"].includes(t.id)));
   return {
     meta:{ title:opts.theme, version:"0.2-proto", kind:"bgm", mode:opts.mode, taste:opts.taste,
-      bpm:opts.bpm, key:{root:rootName, scale:scaleName}, bars, beatsPerBar:4,
-      expansions:{ triangleBass:!!opts.expTri, sampleDrums:!!opts.expSmp } },
-    chords, tracks
+      bpm:opts.bpm, key:{root:ctx.rootName, scale:ctx.scaleName}, bars:opts.bars, beatsPerBar:4,
+      expansions:{ triangleBass:!!opts.expTri, sampleDrums:!!opts.expSmp },
+      trackVariants:{...(opts.trackVariants||{})}, gains:{...(opts.gains||{})} },
+    chords:ctx.chords, tracks
   };
+}
+function regenerateTrack(score, opts, trackId){
+  const next = JSON.parse(JSON.stringify(score));
+  const ctx = buildContext(opts);
+  const tr = buildTrack(ctx, opts, trackId);
+  const idx = next.tracks.findIndex(t=>t.id===trackId);
+  if(idx<0) throw new Error("track not found: " + trackId);
+  next.tracks[idx] = tr;
+  if(opts.mode==="retro" && ["ch1","ch2","ch3"].includes(trackId)) enforceMono([next.tracks[idx]]);
+  next.meta.trackVariants = {...(next.meta.trackVariants||{}), ...(opts.trackVariants||{})};
+  return next;
 }
 
 /* ---------- validation (instruction §8 subset: T1-math / T4 / T5) ---------- */
@@ -447,7 +469,9 @@ async function renderScore(score, onlyId){
   const stepDur = 60/score.meta.bpm/4;
   for(const tr of score.tracks){
     if(onlyId ? tr.id!==onlyId : muted.has(tr.id)) continue;
-    for(const note of tr.notes) scheduleNote(ctx, master, tr, note, stepDur, TASTES[score.meta.taste]); }
+    const tg=ctx.createGain(); tg.gain.value = (score.meta.gains && score.meta.gains[tr.id]!==undefined) ? score.meta.gains[tr.id] : 1;
+    tg.connect(master);
+    for(const note of tr.notes) scheduleNote(ctx, tg, tr, note, stepDur, TASTES[score.meta.taste]); }
   return await ctx.startRendering();
 }
 function bufferToWav(buffer){
@@ -475,20 +499,47 @@ function showChecks(list){
     tr.children[2].textContent=c.detail; body.appendChild(tr); }
   $("verdict").innerHTML = allOk ? '<span class="ok">全項目 ✓</span>' : '<span class="ng">不合格の項目があります</span>';
 }
+let lastOpts=null;
+function optsFromScore(score){
+  const m=score.meta;
+  return { theme:m.title, mode:m.mode, taste:m.taste, bpm:m.bpm, bars:m.bars,
+    key:`${m.key.root}:${m.key.scale}`, expTri:!!(m.expansions&&m.expansions.triangleBass),
+    expSmp:!!(m.expansions&&m.expansions.sampleDrums), variant:0,
+    trackVariants:{...(m.trackVariants||{})}, gains:{...(m.gains||{})} };
+}
+async function refreshAfterEdit(){
+  currentBuffer=await renderScore(currentScore);
+  const merged=validateScore(currentScore).filter(c=>c.id!=="T1").concat(validateBuffer(currentScore,currentBuffer)).sort((a,b)=>a.id.localeCompare(b.id));
+  showChecks(merged); showTracks();
+  $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
+  $("adjBpm").value=currentScore.meta.bpm;
+}
 function showTracks(){
   const el=$("tracks"); el.innerHTML="";
   for(const tr of currentScore.tracks){
     const div=document.createElement("div"); div.className="track";
     const name=document.createElement("span"); name.textContent=`${tr.id}（${tr.role}／${tr.instrument}）・${tr.notes.length}音`;
     if(muted.has(tr.id)) name.classList.add("muted");
-    const btns=document.createElement("span");
+    const btns=document.createElement("span"); btns.style.display="flex"; btns.style.gap="6px"; btns.style.alignItems="center";
     const btn=document.createElement("button"); btn.className="sub"; btn.textContent= muted.has(tr.id)?"ミュート解除":"ミュート";
     btn.onclick=async()=>{ muted.has(tr.id)?muted.delete(tr.id):muted.add(tr.id);
       currentBuffer=await renderScore(currentScore); showTracks(); };
-    const stem=document.createElement("button"); stem.className="sub"; stem.textContent="ステムWAV"; stem.style.marginLeft="6px";
+    const regen=document.createElement("button"); regen.className="sub"; regen.textContent="再生成";
+    regen.title="このパートだけ作り直します（他のパートとコード進行はそのまま）";
+    regen.onclick=async()=>{ if(!lastOpts) lastOpts=optsFromScore(currentScore);
+      lastOpts.trackVariants[tr.id]=(lastOpts.trackVariants[tr.id]||0)+1;
+      currentScore=regenerateTrack(currentScore, lastOpts, tr.id);
+      await refreshAfterEdit(); };
+    const stem=document.createElement("button"); stem.className="sub"; stem.textContent="ステムWAV";
     stem.onclick=async()=>{ const b=await renderScore(currentScore, tr.id);
       download(bufferToWav(b), scoreFilename("wav").replace(".wav", `_stem-${tr.id}.wav`)); };
-    btns.append(btn, stem);
+    const vol=document.createElement("input"); vol.type="range"; vol.min="0"; vol.max="150"; vol.style.width="90px";
+    vol.value=Math.round((((currentScore.meta.gains||{})[tr.id]!==undefined)?currentScore.meta.gains[tr.id]:1)*100);
+    vol.title="パート音量";
+    vol.onchange=async()=>{ if(!currentScore.meta.gains) currentScore.meta.gains={};
+      currentScore.meta.gains[tr.id]=parseInt(vol.value,10)/100;
+      currentBuffer=await renderScore(currentScore); };
+    btns.append(btn, regen, stem, vol);
     div.append(name,btns); el.appendChild(div);
   }
 }
@@ -497,6 +548,7 @@ async function doGenerate(){
     bpm:Math.max(40,Math.min(200,parseInt($("bpm").value||"100",10))), bars:parseInt($("bars").value,10),
     key:$("key").value, expTri:$("expTri").checked, expSmp:$("expSmp").checked, variant:variant++ };
   muted.clear();
+  lastOpts={...opts, trackVariants:{}};
   currentScore=generateScore(opts);
   const scoreChecks=validateScore(currentScore);
   currentBuffer=await renderScore(currentScore);
@@ -505,8 +557,12 @@ async function doGenerate(){
   showChecks(merged); showTracks();
   $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
   $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false;
-  $("midiBtn").disabled=false; $("saveBtn").disabled=false;
+  $("midiBtn").disabled=false; $("saveBtn").disabled=false; $("adjBpmBtn").disabled=false;
+  $("adjBpm").value=currentScore.meta.bpm;
 }
+$("adjBpmBtn").onclick=async()=>{ if(!currentScore) return;
+  const v=Math.max(40,Math.min(200,parseInt($("adjBpm").value||"100",10)));
+  currentScore.meta.bpm=v; await refreshAfterEdit(); };
 /* ---- gallery (localStorage only; nothing leaves the device) ---- */
 const GKEY="lbm-gallery-v1";
 let storageOK=false;
@@ -531,11 +587,13 @@ function showGallery(){
     name.textContent=`${item.score.meta.title}（${item.score.meta.mode}／${TASTES[item.score.meta.taste].label}／${item.score.meta.bpm}BPM） ${item.savedAt}`;
     const btns=document.createElement("span");
     const load=document.createElement("button"); load.className="sub"; load.textContent="読み込む";
-    load.onclick=async()=>{ currentScore=item.score; muted.clear();
+    load.onclick=async()=>{ currentScore=item.score; muted.clear(); lastOpts=optsFromScore(currentScore);
+      $("adjBpmBtn").disabled=false;
       currentBuffer=await renderScore(currentScore);
       const merged=validateScore(currentScore).filter(c=>c.id!=="T1").concat(validateBuffer(currentScore,currentBuffer)).sort((a,b)=>a.id.localeCompare(b.id));
       showChecks(merged); showTracks(); $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
-      $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false; $("midiBtn").disabled=false; $("saveBtn").disabled=false; };
+      $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false; $("midiBtn").disabled=false; $("saveBtn").disabled=false;
+      $("adjBpm").value=currentScore.meta.bpm; };
     const del=document.createElement("button"); del.className="sub"; del.textContent="削除"; del.style.marginLeft="6px";
     del.onclick=()=>{ storeGallery(loadGallery().filter(x=>x.id!==item.id)); showGallery(); };
     btns.append(load,del); div.append(name,btns); el.appendChild(div);
