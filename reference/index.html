@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ループBGMメーカー（試作 v0.1）</title>
+<style>
+  :root{--bg:#101216;--panel:#1a1d24;--panel2:#22262f;--line:#333947;--text:#e8eaf0;--sub:#9aa3b5;--acc:#ffb454;--ok:#57d38c;--ng:#ff6b6b}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif}
+  header{padding:18px 20px 6px} h1{font-size:20px;margin:0} .note{color:var(--sub);font-size:12px;margin-top:4px}
+  main{display:grid;grid-template-columns:340px 1fr;gap:14px;padding:14px 20px 24px;align-items:start}
+  @media(max-width:820px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h2{font-size:14px;margin:0 0 10px;color:var(--acc)}
+  label{display:block;font-size:12px;color:var(--sub);margin:10px 0 4px}
+  input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:14px}
+  .row{display:flex;gap:8px}.row>*{flex:1}
+  .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);margin-top:8px}
+  .chk input{width:auto}
+  button{background:var(--acc);color:#1a1206;border:none;border-radius:9px;padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer}
+  button.sub{background:var(--panel2);color:var(--text);border:1px solid var(--line);font-weight:400}
+  button:disabled{opacity:.45;cursor:default}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:top}
+  .ok{color:var(--ok)} .ng{color:var(--ng)}
+  .meta{font-size:12px;color:var(--sub);line-height:1.7}
+  .track{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:7px 0;font-size:13px}
+  .track button{padding:4px 10px;font-size:12px}
+  .track .muted{opacity:.45}
+  pre{background:#0b0c0f;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11px;overflow:auto;max-height:220px}
+  footer{padding:0 20px 22px;color:var(--sub);font-size:11px;line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <h1>ループBGMメーカー <span style="color:var(--sub);font-size:13px">試作 v0.1（参照実装・検証用）</span></h1>
+  <div class="note">指示書 v0.2 に基づく試作です。譜面データ（JSON）を生成し、プログラムが音にします。デザインは最終版ではありません。</div>
+</header>
+<main>
+  <section class="card">
+    <h2>BGMを作る</h2>
+    <label>テーマ／用途</label>
+    <input id="theme" type="text" value="森のRPGの街" maxlength="60">
+    <label>モード</label>
+    <select id="mode">
+      <option value="standard">スタンダード</option>
+      <option value="retro">レトロ4ch</option>
+      <option value="piano">ピアノソロ</option>
+      <option value="ambient">アンビエント</option>
+    </select>
+    <div id="retroOpts" style="display:none">
+      <label class="chk"><input type="checkbox" id="expTri"> 拡張1：三角波ベース（CH3を切替）</label>
+      <label class="chk"><input type="checkbox" id="expSmp"> 拡張2：サンプルドラム（1ch追加）</label>
+      <div class="meta" id="retroState">構成：Game Boy方式 4ch</div>
+    </div>
+    <label>テイスト</label>
+    <select id="taste"></select>
+    <div class="row">
+      <div><label>BPM</label><input id="bpm" type="number" min="40" max="200" value="100"></div>
+      <div><label>小節数</label>
+        <select id="bars"><option>4</option><option selected>8</option><option>16</option></select></div>
+    </div>
+    <label>調（キー）</label>
+    <select id="key">
+      <option value="C:major">C メジャー</option><option value="G:major">G メジャー</option>
+      <option value="F:major">F メジャー</option><option value="A:minor">A マイナー</option>
+      <option value="E:minor">E マイナー</option><option value="D:minor">D マイナー</option>
+    </select>
+    <div class="btns">
+      <button id="genBtn">生成する</button>
+      <button id="playBtn" class="sub" disabled>▶ ループ試聴</button>
+      <button id="stopBtn" class="sub" disabled>■ 停止</button>
+    </div>
+    <div class="btns">
+      <button id="wavBtn" class="sub" disabled>WAVを書き出す</button>
+      <button id="midiBtn" class="sub" disabled>MIDIを書き出す</button>
+      <button id="jsonBtn" class="sub" disabled>譜面JSONを書き出す</button>
+      <button id="saveBtn" class="sub" disabled>ギャラリーに保存</button>
+    </div>
+    <div class="meta">MP3書き出しは未実装です（エンコーダ依存のライセンス確認が §10 の公開前項目のため、判断を公開段に残しています）。</div>
+    <h2 style="margin-top:20px">効果音（同梱・分離可能モジュール）</h2>
+    <label>カテゴリ</label>
+    <select id="seCat">
+      <option value="decide">決定</option><option value="cancel">キャンセル</option>
+      <option value="cursor">カーソル移動</option><option value="success">成功・レベルアップ</option>
+      <option value="fail">失敗</option><option value="jump">ジャンプ</option>
+      <option value="hit">ヒット</option><option value="get">アイテム取得</option>
+    </select>
+    <div class="btns">
+      <button id="sePlay" class="sub">効果音を鳴らす</button>
+      <button id="seWav" class="sub">効果音WAVを書き出す</button>
+    </div>
+  </section>
+  <section>
+    <div class="card">
+      <h2>検証結果（指示書 §8）</h2>
+      <div id="verdict" class="meta">まだ生成していません。</div>
+      <table id="checks" style="display:none">
+        <thead><tr><th style="width:52px">項目</th><th style="width:70px">結果</th><th>内容</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="btns">
+        <button id="batchBtn" class="sub">全モード×全テイストを一括検証（T1〜T5）</button>
+      </div>
+      <div id="batchResult" class="meta"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>ギャラリー（この端末の中だけに保存）</h2>
+      <div id="gallery" class="meta">保存された作品はまだありません。生成して「ギャラリーに保存」を押すと、譜面データがこのブラウザ内に保存されます（外部送信なし）。</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>パート構成</h2>
+      <div id="tracks" class="meta">生成するとパートが表示されます。ミュートは試聴とWAVに反映されます。</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>譜面データ（JSON・正本）</h2>
+      <pre id="scoreView">—</pre>
+    </div>
+  </section>
+</main>
+<footer>
+  生成物について：本メーカーは生成物に権利を主張しません。ただし権利が発生するか、第三者の権利を侵害していないかの保証はしません。公開・利用の前に、ご自身で試聴し既存曲との類似がないか確認してください（指示書 §10）。<br>
+  本試作の生成はブラウザ内で完結し、入力したテーマや生成物を外部に送信しません。
+</footer>
+<script>
+"use strict";
+/* ============================================================
+   Loop BGM Maker prototype — core (score generation + validation)
+   Pure logic: no DOM access in this section (node tests reuse it).
+   ============================================================ */
+const STEPS_PER_BAR = 16; // 4/4, 16th = 1 step
+const NOTE_NAMES = {C:0,"C#":1,D:2,"D#":3,E:4,F:5,"F#":6,G:7,"G#":8,A:9,"A#":10,B:11};
+const SCALES = { major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10] };
+
+const TASTES = {
+  pop:      {label:"ポップ",           bpm:112, minor:false, prog:[0,4,5,3],   density:.62, wave:"square"},
+  daily:    {label:"ほのぼの日常",     bpm:92,  minor:false, prog:[0,5,3,4],   density:.48, wave:"triangle"},
+  lofi:     {label:"落ち着いた（lofi）",bpm:76, minor:false, prog:[0,3,5,4],   density:.40, wave:"sine"},
+  ballad:   {label:"バラード",         bpm:68,  minor:false, prog:[0,5,1,4],   density:.36, wave:"sine"},
+  wa:       {label:"和風",             bpm:84,  minor:true,  prog:[0,0,3,5],   density:.44, wave:"triangle", penta:true},
+  jazz:     {label:"ジャズ風",         bpm:110, minor:false, prog:[0,5,1,4],   density:.55, wave:"triangle", swing:true},
+  rock:     {label:"ロック",           bpm:132, minor:true,  prog:[0,0,2,4],   density:.70, wave:"sawtooth"},
+  electro:  {label:"エレクトロニック", bpm:122, minor:true,  prog:[0,0,5,3],   density:.66, wave:"square"},
+  battle:   {label:"戦闘",             bpm:150, minor:true,  prog:[0,3,0,5],   density:.78, wave:"sawtooth"},
+  mystery:  {label:"神秘的／ダンジョン",bpm:80, minor:true,  prog:[0,2,3,2],   density:.34, wave:"sine"},
+  dark:     {label:"ダーク／ホラー",   bpm:66,  minor:true,  prog:[0,1,0,1],   density:.26, wave:"sine"},
+  grand:    {label:"壮大／冒険",       bpm:96,  minor:false, prog:[0,3,4,5],   density:.58, wave:"sawtooth"},
+};
+
+function hashSeed(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+function chordNotes(rootMidi, scaleName, degree, count){
+  const scale = SCALES[scaleName];
+  const base = rootMidi + scale[degree % scale.length] + 12 * Math.floor(degree / scale.length);
+  const third = rootMidi + scale[(degree+2) % scale.length] + 12*Math.floor((degree+2)/scale.length);
+  const fifth = rootMidi + scale[(degree+4) % scale.length] + 12*Math.floor((degree+4)/scale.length);
+  const notes=[base,third,fifth];
+  if(count>3) notes.push(rootMidi + scale[(degree+6)%scale.length] + 12*Math.floor((degree+6)/scale.length));
+  return notes;
+}
+function scaleTone(rootMidi, scaleName, idx){ const s=SCALES[scaleName]; return rootMidi + s[((idx % s.length)+s.length)%s.length] + 12*Math.floor(idx/s.length); }
+
+function generateScore(opts){
+  const taste = TASTES[opts.taste];
+  const bars = opts.bars, totalSteps = bars * STEPS_PER_BAR;
+  const [rootName, prefScale] = opts.key.split(":");
+  const scaleName = prefScale;
+  const rootMidi = 60 + NOTE_NAMES[rootName]; // melody octave base
+  const seed = hashSeed(opts.theme + "|" + opts.mode + "|" + opts.taste + "|" + opts.bpm + "|" + bars + "|" + (opts.variant||0));
+  const rand = rng(seed);
+  const chords = [];
+  for(let b=0;b<bars;b++){ const deg = taste.prog[b % taste.prog.length]; chords.push({bar:b, degree:deg}); }
+  const tracks = [];
+  const density = taste.density;
+
+  function melodyTrack(id, instrument, baseMidi){
+    const notes=[]; let degIdx = 14; // scale-degree position (2 octaves up from base degree 0)
+    for(let s=0;s<totalSteps;s++){
+      const bar = Math.floor(s/STEPS_PER_BAR);
+      const deg = chords[bar].degree;
+      const onBeat = s % 4 === 0;
+      const p = onBeat ? density+.25 : density*.55;
+      if(rand() < p){
+        if(rand() < .62){ // chord tone
+          const ct = chordNotes(baseMidi, scaleName, deg, 3);
+          const pick = ct[Math.floor(rand()*ct.length)] + 12;
+          notes.push({step:s, midi:pick, len:(rand()<.3?4:2), vel:.65+rand()*.3});
+        } else { // scale walk by degrees (stays in scale and in range)
+          degIdx += (rand()<.5?-1:1) * (rand()<.2?2:1);
+          degIdx = Math.max(7, Math.min(24, degIdx));
+          notes.push({step:s, midi:scaleTone(baseMidi, scaleName, degIdx), len:2, vel:.55+rand()*.3});
+        }
+      }
+    }
+    return {id, role:"melody", instrument, notes};
+  }
+  function bassTrack(id, instrument, baseMidi){
+    const notes=[];
+    for(let b=0;b<bars;b++){
+      const deg = chords[b].degree;
+      const root = chordNotes(baseMidi, scaleName, deg, 3)[0];
+      const fifth = chordNotes(baseMidi, scaleName, deg, 3)[2];
+      const pat = [0,4,8,12];
+      for(const off of pat){ notes.push({step:b*16+off, midi:root, len:3, vel:.8}); }
+      if(rand()<.5) notes.push({step:b*16+14, midi:fifth, len:2, vel:.6});
+    }
+    return {id, role:"bass", instrument, notes};
+  }
+  function drumTrack(id){
+    const notes=[]; // midi 1 = short noise (hat), 2 = long noise (snare-like)
+    for(let s=0;s<totalSteps;s++){
+      if(s%4===2) notes.push({step:s, midi:2, len:2, vel:.8});
+      else if(s%2===0) notes.push({step:s, midi:1, len:1, vel:.5});
+    }
+    return {id, role:"drums", instrument:"noise", notes};
+  }
+
+  if(opts.mode==="standard"){
+    const chordTr = {id:"chords", role:"chords", instrument:"pad", notes:[]};
+    for(let b=0;b<bars;b++){ for(const m of chordNotes(rootMidi-12, scaleName, chords[b].degree, 4)) chordTr.notes.push({step:b*16, midi:m, len:16, vel:.4}); }
+    tracks.push(melodyTrack("melody","lead",rootMidi));
+    tracks.push(chordTr);
+    tracks.push(bassTrack("bass","synthbass",rootMidi-24));
+    tracks.push(drumTrack("drums"));
+  }
+  if(opts.mode==="retro"){
+    const mel = melodyTrack("ch1","pulse",rootMidi); mel.duty=.25;
+    const arp = {id:"ch2", role:"harmony", instrument:"pulse", duty:.5, notes:[]};
+    for(let b=0;b<bars;b++){ const ct=chordNotes(rootMidi, scaleName, chords[b].degree,3);
+      for(let s=0;s<16;s+=2){ arp.notes.push({step:b*16+s, midi:ct[(s/2)%3]+12, len:2, vel:.4}); } }
+    const bass = bassTrack("ch3", opts.expTri ? "triangle" : "wave", rootMidi-24);
+    for(const tr of [mel, arp, bass]){ // retro channels are monophonic: truncate overlaps
+      tr.notes.sort((a,b)=>a.step-b.step);
+      for(let i=0;i<tr.notes.length-1;i++){ const nxt=tr.notes[i+1].step;
+        if(tr.notes[i].step + tr.notes[i].len > nxt) tr.notes[i].len = Math.max(1, nxt - tr.notes[i].step); }
+    }
+    tracks.push(mel, arp, bass, drumTrack("ch4"));
+    if(opts.expSmp){
+      const smp={id:"ch5", role:"sampledrums", instrument:"sample", notes:[]};
+      for(let s=0;s<totalSteps;s+=8){ smp.notes.push({step:s, midi:1, len:2, vel:.9}); if(s%16===8) smp.notes.push({step:s, midi:2, len:2, vel:.8}); }
+      tracks.push(smp);
+    }
+  }
+  if(opts.mode==="piano"){
+    const tr = melodyTrack("piano","piano",rootMidi);
+    tr.role="piano";
+    for(let b=0;b<bars;b++){ const ct=chordNotes(rootMidi-24, scaleName, chords[b].degree,3);
+      tr.notes.push({step:b*16, midi:ct[0], len:8, vel:.5},{step:b*16, midi:ct[1], len:8, vel:.42},{step:b*16+8, midi:ct[2], len:6, vel:.45}); }
+    tr.notes.sort((a,b2)=>a.step-b2.step);
+    tracks.push(tr);
+  }
+  if(opts.mode==="ambient"){
+    const pad={id:"pad", role:"pad", instrument:"pad", notes:[]};
+    for(let b=0;b<bars;b+=2){ for(const m of chordNotes(rootMidi-12, scaleName, chords[b].degree,4)) pad.notes.push({step:b*16, midi:m, len:32, vel:.35}); }
+    tracks.push(pad);
+    const sparse = melodyTrack("sparse","bell",rootMidi);
+    sparse.notes = sparse.notes.filter((_,i)=>i%3===0).map(n=>({...n, len:8, vel:n.vel*.7}));
+    tracks.push(sparse);
+  }
+  return {
+    meta:{ title:opts.theme, version:"0.2-proto", kind:"bgm", mode:opts.mode, taste:opts.taste,
+      bpm:opts.bpm, key:{root:rootName, scale:scaleName}, bars, beatsPerBar:4,
+      expansions:{ triangleBass:!!opts.expTri, sampleDrums:!!opts.expSmp } },
+    chords, tracks
+  };
+}
+
+/* ---------- validation (instruction §8 subset: T1-math / T4 / T5) ---------- */
+function expectedSeconds(score){ return score.meta.bars * 240 / score.meta.bpm; }
+function validateScore(score){
+  const checks=[]; const push=(id,ok,detail)=>checks.push({id,ok,detail});
+  // T5: schema-ish
+  let t5 = !!score.meta && Array.isArray(score.tracks) && score.tracks.length>0;
+  const total = score.meta.bars * STEPS_PER_BAR;
+  for(const tr of score.tracks||[]){ for(const n of tr.notes||[]){
+    if(!(n.step>=0 && n.step<total && n.len>0 && n.step+n.len<=total+32)) t5=false;
+    if(tr.instrument!=="noise" && tr.instrument!=="sample" && !(n.midi>=24 && n.midi<=108)) t5=false;
+  }}
+  push("T5", t5, t5 ? "譜面の形式・音符の範囲が妥当" : "形式または範囲の違反あり");
+  // T4: mode constraints
+  let t4=true, why=[];
+  const mode=score.meta.mode, ex=score.meta.expansions||{};
+  if(mode==="retro"){
+    const want = ex.sampleDrums ? 5 : 4;
+    if(score.tracks.length!==want){ t4=false; why.push(`チャンネル数 ${score.tracks.length} ≠ ${want}`); }
+    for(const tr of score.tracks){ const sorted=[...tr.notes].sort((a,b)=>a.step-b.step);
+      for(let i=1;i<sorted.length;i++){ if(sorted[i].step < sorted[i-1].step + sorted[i-1].len && tr.instrument!=="sample"){ /* overlap check per channel */ 
+        if(sorted[i].step < sorted[i-1].step + sorted[i-1].len){ t4=false; why.push(`${tr.id} で音符が重なっている`); break; } } } }
+    const bass=score.tracks.find(t=>t.id==="ch3");
+    if(bass && !!ex.triangleBass !== (bass.instrument==="triangle")){ t4=false; why.push("拡張1とCH3の音色が一致しない"); }
+    if(!ex.sampleDrums && score.tracks.some(t=>t.instrument==="sample")){ t4=false; why.push("拡張OFFなのにサンプルchがある"); }
+  }
+  if(mode==="piano" && score.tracks.length!==1){ t4=false; why.push("ピアノソロは1パートのみ"); }
+  if(mode==="ambient" && score.tracks.some(t=>t.role==="drums")){ t4=false; why.push("アンビエントにドラムがある"); }
+  if(mode==="standard" && score.tracks.length>8){ t4=false; why.push("パート数が上限8を超えている"); }
+  push("T4", t4, t4 ? `モード制約（${mode}）を満たす` : why.join("／"));
+  // T1 (math part): target duration is well-defined
+  const sec = expectedSeconds(score);
+  push("T1", sec>0 && isFinite(sec), `目標尺 ${sec.toFixed(2)}秒（${score.meta.bars}小節・${score.meta.bpm}BPM）。実尺はレンダリング後に照合`);
+  return checks;
+}
+function validateBuffer(score, buffer){
+  const checks=[];
+  const target = expectedSeconds(score);
+  const diff = Math.abs(buffer.duration - target);
+  checks.push({id:"T1", ok:diff<=0.05, detail:`実尺 ${buffer.duration.toFixed(2)}秒 ／ 目標 ${target.toFixed(2)}秒（差 ${diff.toFixed(3)}秒）`});
+  let peak=0, sum=0, n=0;
+  for(let ch=0; ch<buffer.numberOfChannels; ch++){ const d=buffer.getChannelData(ch);
+    for(let i=0;i<d.length;i++){ const a=Math.abs(d[i]); if(a>peak)peak=a; sum+=d[i]*d[i]; n++; } }
+  const rms=Math.sqrt(sum/Math.max(1,n));
+  checks.push({id:"T3", ok:peak<=0.99 && rms>0.01, detail:`ピーク ${peak.toFixed(3)}／RMS ${rms.toFixed(3)}（無音でなく、割れていない）`});
+  const d0=buffer.getChannelData(0); const head=Math.abs(d0[0]), tail=Math.abs(d0[d0.length-1]);
+  checks.push({id:"T2", ok:Math.max(head,tail)<0.35, detail:`継ぎ目の振幅（先頭 ${head.toFixed(3)}／末尾 ${tail.toFixed(3)}）。小さいほど滑らか`});
+  return checks;
+}
+/* ---------- MIDI export (pure; node tests reuse it) ---------- */
+const GM_PROGRAM = { pulse:80, wave:82, triangle:87, piano:0, pad:88, bell:14, synthbass:38, lead:81, sample:0, noise:0 };
+function vlqBytes(n){ const b=[n&0x7f]; n>>=7; while(n>0){ b.unshift((n&0x7f)|0x80); n>>=7; } return b; }
+function scoreToMidi(score){
+  const PPQ=96, TICK_PER_STEP=PPQ/4;
+  const bytes=[]; const push=(...a)=>bytes.push(...a);
+  const pushStr=s=>{ for(let i=0;i<s.length;i++) push(s.charCodeAt(i)); };
+  const u16=n=>[n>>8&255, n&255], u32=n=>[n>>24&255, n>>16&255, n>>8&255, n&255];
+  const tracksData=[];
+  { // conductor track
+    const ev=[]; const tempo=Math.round(60000000/score.meta.bpm);
+    ev.push(0x00,0xff,0x51,0x03, tempo>>16&255, tempo>>8&255, tempo&255);
+    ev.push(0x00,0xff,0x2f,0x00); tracksData.push(ev);
+  }
+  let ch=0;
+  for(const tr of score.tracks){
+    const isDrum = tr.instrument==="noise" || tr.instrument==="sample";
+    let chan;
+    if(isDrum){ chan = 9; } else { chan = ch++; if(chan === 9) chan = ch++; }
+    const events=[];
+    if(!isDrum){ const prog=GM_PROGRAM[tr.instrument] ?? 80; events.push({tick:0, data:[0xc0|chan, prog]}); }
+    for(const n of tr.notes){
+      let midi=n.midi;
+      if(tr.instrument==="noise") midi = n.midi===2 ? 38 : 42;
+      if(tr.instrument==="sample") midi = n.midi===1 ? 36 : 38;
+      const vel=Math.max(1, Math.min(127, Math.round((n.vel??.7)*127)));
+      events.push({tick:n.step*TICK_PER_STEP, data:[0x90|chan, midi, vel]});
+      events.push({tick:(n.step+n.len)*TICK_PER_STEP, data:[0x80|chan, midi, 0]});
+    }
+    events.sort((a,b)=>a.tick-b.tick || (a.data[0]&0xf0)-(b.data[0]&0xf0));
+    const ev=[]; let last=0;
+    for(const e of events){ ev.push(...vlqBytes(e.tick-last), ...e.data); last=e.tick; }
+    ev.push(0x00,0xff,0x2f,0x00); tracksData.push(ev);
+  }
+  pushStr("MThd"); push(...u32(6), ...u16(1), ...u16(tracksData.length), ...u16(PPQ));
+  for(const ev of tracksData){ pushStr("MTrk"); push(...u32(ev.length), ...ev); }
+  return new Uint8Array(bytes);
+}
+/* ===================== SE module (separate) ===================== */
+const SE_RECIPES = {
+  decide:{dur:.12, type:"sweep", from:660, to:990},
+  cancel:{dur:.14, type:"sweep", from:520, to:330},
+  cursor:{dur:.06, type:"sweep", from:880, to:880},
+  success:{dur:.5, type:"arp", notes:[523,659,784,1047]},
+  fail:{dur:.35, type:"sweep", from:300, to:140},
+  jump:{dur:.18, type:"sweep", from:300, to:760},
+  hit:{dur:.1, type:"noise"},
+  get:{dur:.3, type:"arp", notes:[784,988,1175]},
+};
+</script>
+<script>
+"use strict";
+/* ============ browser layer: render / play / export / UI ============ */
+const $ = id => document.getElementById(id);
+let audioCtx=null, currentScore=null, currentBuffer=null, playSrc=null, variant=0;
+const muted = new Set();
+
+function ensureCtx(){ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
+function pulseWave(ctx, duty){
+  const n=64, real=new Float32Array(n), imag=new Float32Array(n);
+  for(let k=1;k<n;k++){ imag[k] = (2/(k*Math.PI)) * Math.sin(k*Math.PI*duty) * (k%2? 1 : (2*duty-1)); }
+  return ctx.createPeriodicWave(real, imag);
+}
+function noiseBuffer(ctx, sec){
+  const b=ctx.createBuffer(1, Math.ceil(ctx.sampleRate*sec), ctx.sampleRate);
+  const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b;
+}
+function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5 recipes, approximated)
+  const sr=ctx.sampleRate, dur= kind==="kick"? .25 : .18;
+  const b=ctx.createBuffer(1, Math.ceil(sr*dur), sr), d=b.getChannelData(0);
+  if(kind==="kick"){ for(let i=0;i<d.length;i++){ const t=i/sr; const f=45+(120-45)*Math.exp(-t/0.03); const ph=2*Math.PI*(45*t + (75)*(0.03)*(1-Math.exp(-t/0.03))); d[i]=Math.sin(ph)*Math.exp(-t/0.07)*0.9; } }
+  else { for(let i=0;i<d.length;i++){ const t=i/sr; d[i]=(Math.random()*2-1)*Math.exp(-t/0.05)*0.7 + Math.sin(2*Math.PI*190*t)*Math.exp(-t/0.04)*0.3; } }
+  return b;
+}
+function scheduleNote(ctx, dest, tr, note, stepDur, taste){
+  const t0 = note.step * stepDur, dur = Math.max(.03, note.len * stepDur * .92);
+  const g = ctx.createGain(); g.connect(dest);
+  const vel = note.vel ?? .7;
+  const playOsc = (type, freq, peak, attack, decayTo)=>{
+    const o=ctx.createOscillator(); o.type=type; o.frequency.value=freq;
+    if(type==="pulse") o.setPeriodicWave(pulseWave(ctx, tr.duty||.25));
+    const og=ctx.createGain(); og.gain.setValueAtTime(0, t0);
+    og.gain.linearRampToValueAtTime(peak, t0+attack);
+    og.gain.exponentialRampToValueAtTime(Math.max(.001, decayTo), t0+dur);
+    o.connect(og); og.connect(g); o.start(t0); o.stop(t0+dur+.05);
+  };
+  const freq = m => 440*Math.pow(2,(m-69)/12);
+  switch(tr.instrument){
+    case "pulse": playOsc("pulse", freq(note.midi), vel*.5, .005, .08); break;
+    case "wave": { const o=ctx.createOscillator(); o.frequency.value=freq(note.midi);
+      const real=new Float32Array([0,0,.6,.2,.1]), imag=new Float32Array([0,1,.4,.2,.1]);
+      o.setPeriodicWave(ctx.createPeriodicWave(real,imag)); const og=ctx.createGain();
+      og.gain.setValueAtTime(vel*.55,t0); og.gain.setValueAtTime(vel*.55,t0+dur*.8); og.gain.linearRampToValueAtTime(0,t0+dur);
+      o.connect(og); og.connect(g); o.start(t0); o.stop(t0+dur+.05); break; }
+    case "triangle": playOsc("triangle", freq(note.midi), vel*.6, .005, .1); break;
+    case "noise": { const src=ctx.createBufferSource(); src.buffer=noiseBuffer(ctx,.3);
+      const f=ctx.createBiquadFilter(); f.type= note.midi===2 ? "bandpass":"highpass"; f.frequency.value= note.midi===2?1800:8000;
+      const ng=ctx.createGain(); const nd = note.midi===2? .18:.05;
+      ng.gain.setValueAtTime(vel*.5,t0); ng.gain.exponentialRampToValueAtTime(.001,t0+nd);
+      src.connect(f); f.connect(ng); ng.connect(g); src.start(t0); src.stop(t0+nd+.05); break; }
+    case "sample": { const src=ctx.createBufferSource(); src.buffer=drumSampleBuffer(ctx, note.midi===1?"kick":"snare");
+      const sg=ctx.createGain(); sg.gain.value=vel*.9; src.connect(sg); sg.connect(g); src.start(t0); break; }
+    case "piano": { const f0=freq(note.midi);
+      [[1,.55],[2,.22],[3,.08]].forEach(([h,a])=>{ const o=ctx.createOscillator(); o.type="sine"; o.frequency.value=f0*h;
+        const og=ctx.createGain(); og.gain.setValueAtTime(vel*a,t0); og.gain.exponentialRampToValueAtTime(.001,t0+Math.min(dur*1.6,.9));
+        o.connect(og); og.connect(g); o.start(t0); o.stop(t0+1); }); break; }
+    case "pad": { [-4,4].forEach(cents=>{ const o=ctx.createOscillator(); o.type="triangle"; o.frequency.value=freq(note.midi); o.detune.value=cents;
+        const og=ctx.createGain(); og.gain.setValueAtTime(0,t0); og.gain.linearRampToValueAtTime(vel*.22,t0+Math.min(.4,dur/3));
+        og.gain.setValueAtTime(vel*.22, t0+dur*.75); og.gain.linearRampToValueAtTime(0,t0+dur);
+        o.connect(og); og.connect(g); o.start(t0); o.stop(t0+dur+.05); }); break; }
+    case "bell": playOsc("sine", freq(note.midi), vel*.5, .002, .02); break;
+    case "synthbass": { const o=ctx.createOscillator(); o.type="sawtooth"; o.frequency.value=freq(note.midi);
+      const f=ctx.createBiquadFilter(); f.type="lowpass"; f.frequency.value=700;
+      const og=ctx.createGain(); og.gain.setValueAtTime(vel*.5,t0); og.gain.exponentialRampToValueAtTime(.05,t0+dur);
+      o.connect(f); f.connect(og); og.connect(g); o.start(t0); o.stop(t0+dur+.05); break; }
+    default: playOsc(TASTES[currentScore.meta.taste].wave, freq(note.midi), vel*.45, .008, .08);
+  }
+}
+async function renderScore(score, onlyId){
+  const sec = expectedSeconds(score);
+  const sr = 44100;
+  const ctx = new OfflineAudioContext(2, Math.round(sec*sr), sr);
+  const master = ctx.createGain(); master.gain.value=.9; master.connect(ctx.destination);
+  const stepDur = 60/score.meta.bpm/4;
+  for(const tr of score.tracks){
+    if(onlyId ? tr.id!==onlyId : muted.has(tr.id)) continue;
+    for(const note of tr.notes) scheduleNote(ctx, master, tr, note, stepDur, TASTES[score.meta.taste]); }
+  return await ctx.startRendering();
+}
+function bufferToWav(buffer){
+  const nCh=2, sr=buffer.sampleRate, len=buffer.length;
+  const bytes=44+len*nCh*2, ab=new ArrayBuffer(bytes), v=new DataView(ab);
+  const wstr=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  wstr(0,"RIFF"); v.setUint32(4,bytes-8,true); wstr(8,"WAVEfmt "); v.setUint32(16,16,true);
+  v.setUint16(20,1,true); v.setUint16(22,nCh,true); v.setUint32(24,sr,true); v.setUint32(28,sr*nCh*2,true);
+  v.setUint16(32,nCh*2,true); v.setUint16(34,16,true); wstr(36,"data"); v.setUint32(40,len*nCh*2,true);
+  const L=buffer.getChannelData(0), R=buffer.numberOfChannels>1?buffer.getChannelData(1):L;
+  let o=44; for(let i=0;i<len;i++){ for(const d of [L[i],R[i]]){ const s=Math.max(-1,Math.min(1,d)); v.setInt16(o, s<0? s*32768 : s*32767, true); o+=2; } }
+  return new Blob([ab],{type:"audio/wav"});
+}
+function download(blob, name){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
+function scoreFilename(ext){
+  const m=currentScore.meta; const ex=(m.expansions.triangleBass?"_xtri":"")+(m.expansions.sampleDrums?"_xsmp":"");
+  return `${m.title}_${m.mode}_${m.bpm}bpm_${m.bars}bar${ex}.${ext}`;
+}
+function showChecks(list){
+  const tb=$("checks"); tb.style.display=""; const body=tb.querySelector("tbody"); body.innerHTML="";
+  let allOk=true;
+  for(const c of list){ if(!c.ok) allOk=false;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${c.id}</td><td class="${c.ok?"ok":"ng"}">${c.ok?"✓":"✗"}</td><td></td>`;
+    tr.children[2].textContent=c.detail; body.appendChild(tr); }
+  $("verdict").innerHTML = allOk ? '<span class="ok">全項目 ✓</span>' : '<span class="ng">不合格の項目があります</span>';
+}
+function showTracks(){
+  const el=$("tracks"); el.innerHTML="";
+  for(const tr of currentScore.tracks){
+    const div=document.createElement("div"); div.className="track";
+    const name=document.createElement("span"); name.textContent=`${tr.id}（${tr.role}／${tr.instrument}）・${tr.notes.length}音`;
+    if(muted.has(tr.id)) name.classList.add("muted");
+    const btns=document.createElement("span");
+    const btn=document.createElement("button"); btn.className="sub"; btn.textContent= muted.has(tr.id)?"ミュート解除":"ミュート";
+    btn.onclick=async()=>{ muted.has(tr.id)?muted.delete(tr.id):muted.add(tr.id);
+      currentBuffer=await renderScore(currentScore); showTracks(); };
+    const stem=document.createElement("button"); stem.className="sub"; stem.textContent="ステムWAV"; stem.style.marginLeft="6px";
+    stem.onclick=async()=>{ const b=await renderScore(currentScore, tr.id);
+      download(bufferToWav(b), scoreFilename("wav").replace(".wav", `_stem-${tr.id}.wav`)); };
+    btns.append(btn, stem);
+    div.append(name,btns); el.appendChild(div);
+  }
+}
+async function doGenerate(){
+  const opts={ theme:$("theme").value.trim()||"無題", mode:$("mode").value, taste:$("taste").value,
+    bpm:Math.max(40,Math.min(200,parseInt($("bpm").value||"100",10))), bars:parseInt($("bars").value,10),
+    key:$("key").value, expTri:$("expTri").checked, expSmp:$("expSmp").checked, variant:variant++ };
+  muted.clear();
+  currentScore=generateScore(opts);
+  const scoreChecks=validateScore(currentScore);
+  currentBuffer=await renderScore(currentScore);
+  const bufChecks=validateBuffer(currentScore,currentBuffer);
+  const merged=scoreChecks.filter(c=>c.id!=="T1").concat(bufChecks).sort((a,b)=>a.id.localeCompare(b.id));
+  showChecks(merged); showTracks();
+  $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
+  $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false;
+  $("midiBtn").disabled=false; $("saveBtn").disabled=false;
+}
+/* ---- gallery (localStorage only; nothing leaves the device) ---- */
+const GKEY="lbm-gallery-v1";
+function loadGallery(){ try{ return JSON.parse(localStorage.getItem(GKEY)||"[]"); }catch(e){ return []; } }
+function storeGallery(list){ localStorage.setItem(GKEY, JSON.stringify(list)); }
+function showGallery(){
+  const el=$("gallery"); const list=loadGallery();
+  if(!list.length){ el.innerHTML="保存された作品はまだありません。生成して「ギャラリーに保存」を押すと、譜面データがこのブラウザ内に保存されます（外部送信なし）。"; return; }
+  el.innerHTML="";
+  for(const item of list){
+    const div=document.createElement("div"); div.className="track";
+    const name=document.createElement("span");
+    name.textContent=`${item.score.meta.title}（${item.score.meta.mode}／${TASTES[item.score.meta.taste].label}／${item.score.meta.bpm}BPM） ${item.savedAt}`;
+    const btns=document.createElement("span");
+    const load=document.createElement("button"); load.className="sub"; load.textContent="読み込む";
+    load.onclick=async()=>{ currentScore=item.score; muted.clear();
+      currentBuffer=await renderScore(currentScore);
+      const merged=validateScore(currentScore).filter(c=>c.id!=="T1").concat(validateBuffer(currentScore,currentBuffer)).sort((a,b)=>a.id.localeCompare(b.id));
+      showChecks(merged); showTracks(); $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
+      $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false; $("midiBtn").disabled=false; $("saveBtn").disabled=false; };
+    const del=document.createElement("button"); del.className="sub"; del.textContent="削除"; del.style.marginLeft="6px";
+    del.onclick=()=>{ storeGallery(loadGallery().filter(x=>x.id!==item.id)); showGallery(); };
+    btns.append(load,del); div.append(name,btns); el.appendChild(div);
+  }
+}
+/* ---- batch validation: all mode configs x all tastes (T1-T5) ---- */
+async function batchValidate(){
+  const btn=$("batchBtn"); btn.disabled=true;
+  const configs=[{mode:"standard"},{mode:"retro"},{mode:"retro",expTri:true},{mode:"retro",expSmp:true},{mode:"retro",expTri:true,expSmp:true},{mode:"piano"},{mode:"ambient"}];
+  let total=0, failed=[];
+  for(const cfg of configs){ for(const taste of Object.keys(TASTES)){
+    const s=generateScore({theme:"一括検証", taste, bpm:120, bars:4, key:"C:major", variant:0, ...cfg});
+    const buf=await renderScore(s);
+    const checks=validateScore(s).filter(c=>c.id!=="T1").concat(validateBuffer(s,buf));
+    total++;
+    for(const c of checks) if(!c.ok) failed.push(`${cfg.mode}${cfg.expTri?"+tri":""}${cfg.expSmp?"+smp":""} x ${taste}: ${c.id} ${c.detail}`);
+    $("batchResult").textContent=`検証中… ${total} / ${configs.length*Object.keys(TASTES).length}`;
+    await new Promise(r=>setTimeout(r,0));
+  }}
+  $("batchResult").innerHTML = failed.length===0
+    ? `<span class="ok">一括検証 全${total}組合せ ✓（T1〜T5）</span>`
+    : `<span class="ng">${failed.length}件の不合格</span><br>` + failed.slice(0,20).join("<br>");
+  btn.disabled=false;
+}
+/* ---- SE rendering ---- */
+async function renderSE(cat){
+  const r=SE_RECIPES[cat]; const sr=44100; const dur=r.dur||.3;
+  const ctx=new OfflineAudioContext(1, Math.ceil(sr*dur), sr);
+  const g=ctx.createGain(); g.gain.value=.8; g.connect(ctx.destination);
+  if(r.type==="noise"){ const s=ctx.createBufferSource(); s.buffer=noiseBuffer(ctx,dur);
+    const f=ctx.createBiquadFilter(); f.type="bandpass"; f.frequency.value=2000;
+    const ng=ctx.createGain(); ng.gain.setValueAtTime(.8,0); ng.gain.exponentialRampToValueAtTime(.001,dur);
+    s.connect(f); f.connect(ng); ng.connect(g); s.start(0); }
+  else if(r.type==="sweep"){ const o=ctx.createOscillator(); o.type="square";
+    o.frequency.setValueAtTime(r.from,0); o.frequency.exponentialRampToValueAtTime(r.to, dur);
+    const og=ctx.createGain(); og.gain.setValueAtTime(.4,0); og.gain.exponentialRampToValueAtTime(.001,dur);
+    o.connect(og); og.connect(g); o.start(0); o.stop(dur); }
+  else { const step=dur/r.notes.length; r.notes.forEach((m,i)=>{ const o=ctx.createOscillator(); o.type="square";
+    o.frequency.value=440*Math.pow(2,(m-69)/12); const og=ctx.createGain(); const t0=i*step;
+    og.gain.setValueAtTime(.35,t0); og.gain.exponentialRampToValueAtTime(.001,t0+step);
+    o.connect(og); og.connect(g); o.start(t0); o.stop(t0+step); }); }
+  return await ctx.startRendering();
+}
+/* ---- wiring ---- */
+const tasteSel=$("taste");
+for(const [k,v] of Object.entries(TASTES)){ const o=document.createElement("option"); o.value=k; o.textContent=v.label; tasteSel.appendChild(o); }
+tasteSel.value="lofi";
+tasteSel.onchange=()=>{ $("bpm").value=TASTES[tasteSel.value].bpm; };
+$("mode").onchange=()=>{ const retro=$("mode").value==="retro"; $("retroOpts").style.display=retro?"":"none"; };
+function retroStateUpdate(){ const tri=$("expTri").checked, smp=$("expSmp").checked;
+  $("retroState").textContent = "構成：" + (!tri&&!smp ? "Game Boy方式 4ch" : (tri&&smp ? "ファミコン相当 5ch（拡張1+2）" : tri ? "4ch＋三角波ベース" : "4ch＋サンプルドラム")); }
+$("expTri").onchange=retroStateUpdate; $("expSmp").onchange=retroStateUpdate;
+$("genBtn").onclick=doGenerate;
+$("playBtn").onclick=()=>{ const ctx=ensureCtx(); ctx.resume(); stopPlay();
+  playSrc=ctx.createBufferSource(); playSrc.buffer=currentBuffer; playSrc.loop=true; playSrc.connect(ctx.destination); playSrc.start();
+  $("stopBtn").disabled=false; };
+function stopPlay(){ if(playSrc){ try{playSrc.stop()}catch(e){} playSrc=null; } $("stopBtn").disabled=true; }
+$("stopBtn").onclick=stopPlay;
+$("wavBtn").onclick=()=>download(bufferToWav(currentBuffer), scoreFilename("wav"));
+$("midiBtn").onclick=()=>download(new Blob([scoreToMidi(currentScore)],{type:"audio/midi"}), scoreFilename("mid"));
+$("saveBtn").onclick=()=>{ const list=loadGallery();
+  list.unshift({id:Date.now(), savedAt:new Date().toLocaleString("ja-JP"), score:currentScore});
+  storeGallery(list.slice(0,30)); showGallery(); };
+$("batchBtn").onclick=batchValidate;
+showGallery();
+$("jsonBtn").onclick=()=>download(new Blob([JSON.stringify(currentScore,null,1)],{type:"application/json"}), scoreFilename("json"));
+$("sePlay").onclick=async()=>{ const buf=await renderSE($("seCat").value); const ctx=ensureCtx(); ctx.resume();
+  const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start(); };
+$("seWav").onclick=async()=>{ const buf=await renderSE($("seCat").value); download(bufferToWav(buf), `se_${$("seCat").value}.wav`); };
+</script>
+</body>
+</html>
