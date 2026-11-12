@@ -158,5 +158,25 @@ for (const mo of modes) {
     ok(!tm.test(readme), "T8: no trademark strings in README");
   }
 }
+
+// 5) Random seed: same seed reproduces, different seeds diverge but stay valid, seed is recorded.
+{
+  const base = { theme: "種テスト", mode: "standard", taste: "pop", bpm: 120, bars: 8, key: "C:major", variant: 0 };
+  const a = generateScore({ ...base, seed: 123456789 });
+  const b = generateScore({ ...base, seed: 123456789 });
+  ok(JSON.stringify(a.tracks) === JSON.stringify(b.tracks), "seed: same seed -> identical tracks");
+  ok(a.meta.seed === 123456789, "seed: recorded in meta");
+  const c = generateScore({ ...base, seed: 987654321 });
+  ok(JSON.stringify(a.tracks) !== JSON.stringify(c.tracks), "seed: different seed -> different tracks");
+  for (const sd of [0, 1, 42, 2147483647]) {
+    const s = generateScore({ ...base, seed: sd });
+    ok(validateScore(s).every(x => x.ok), `seed ${sd}: score valid`);
+  }
+  const noseed = generateScore({ ...base });
+  ok(noseed.meta.seed === null, "seed: absent seed stays null (legacy behaviour)");
+  // regen keeps the seed family
+  const r = regenerateTrack(a, { ...base, seed: a.meta.seed, trackVariants: { melody: 1 } }, "melody");
+  ok(r.meta.seed === 123456789, "seed: preserved across track regeneration");
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

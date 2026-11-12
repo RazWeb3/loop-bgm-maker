@@ -42,6 +42,9 @@
     <h2>BGMを作る</h2>
     <label>テーマ／用途</label>
     <input id="theme" type="text" value="森のRPGの街" maxlength="60">
+    <label>種（シード）</label>
+    <input id="seed" type="number" min="0" max="2147483647" placeholder="空欄なら生成のたびにランダム">
+    <div class="meta">種は譜面データに記録されます。同じテーマ・設定・種なら同じ曲を再現でき、空欄で生成すると人と被らない曲になります。</div>
     <label>モード</label>
     <select id="mode">
       <option value="standard">スタンダード</option>
@@ -182,7 +185,7 @@ function buildContext(opts){
   const rootMidi = 60 + NOTE_NAMES[rootName];
   const chords = [];
   for(let b=0;b<bars;b++) chords.push({bar:b, degree:taste.prog[b % taste.prog.length]});
-  const baseSeedStr = opts.theme + "|" + opts.mode + "|" + opts.taste + "|" + opts.bpm + "|" + bars + "|" + (opts.variant||0);
+  const baseSeedStr = opts.theme + "|" + opts.mode + "|" + opts.taste + "|" + opts.bpm + "|" + bars + "|" + (opts.variant||0) + (opts.seed!=null ? "|seed:" + (opts.seed>>>0) : "");
   return { taste, bars, totalSteps, scaleName, rootName, rootMidi, chords, baseSeedStr, density:taste.density };
 }
 function trackRng(ctx, opts, trackId){
@@ -296,7 +299,7 @@ function generateScore(opts){
     meta:{ title:opts.theme, version:"0.2-proto", kind:"bgm", mode:opts.mode, taste:opts.taste,
       bpm:opts.bpm, key:{root:ctx.rootName, scale:ctx.scaleName}, bars:opts.bars, beatsPerBar:4,
       expansions:{ triangleBass:!!opts.expTri, sampleDrums:!!opts.expSmp },
-      trackVariants:{...(opts.trackVariants||{})}, gains:{...(opts.gains||{})} },
+      trackVariants:{...(opts.trackVariants||{})}, gains:{...(opts.gains||{})}, seed:(opts.seed!=null ? (opts.seed>>>0) : null) },
     chords:ctx.chords, tracks
   };
 }
@@ -531,7 +534,7 @@ function optsFromScore(score){
   return { theme:m.title, mode:m.mode, taste:m.taste, bpm:m.bpm, bars:m.bars,
     key:`${m.key.root}:${m.key.scale}`, expTri:!!(m.expansions&&m.expansions.triangleBass),
     expSmp:!!(m.expansions&&m.expansions.sampleDrums), variant:0,
-    trackVariants:{...(m.trackVariants||{})}, gains:{...(m.gains||{})} };
+    trackVariants:{...(m.trackVariants||{})}, gains:{...(m.gains||{})}, seed:(m.seed!=null ? m.seed : null) };
 }
 async function refreshAfterEdit(){
   currentBuffer=await renderScore(currentScore);
@@ -571,7 +574,10 @@ function showTracks(){
   }
 }
 async function doGenerate(){
-  const opts={ theme:$("theme").value.trim()||"無題", mode:$("mode").value, taste:$("taste").value,
+  const seedRaw=$("seed").value.trim();
+  const seedVal = seedRaw==="" ? Math.floor(Math.random()*0x80000000) : (parseInt(seedRaw,10)>>>0);
+  $("seed").value=seedVal;
+  const opts={ seed:seedVal, theme:$("theme").value.trim()||"無題", mode:$("mode").value, taste:$("taste").value,
     bpm:Math.max(40,Math.min(200,parseInt($("bpm").value||"100",10))), bars:parseInt($("bars").value,10),
     key:$("key").value, expTri:$("expTri").checked, expSmp:$("expSmp").checked, variant:variant++ };
   muted.clear();
