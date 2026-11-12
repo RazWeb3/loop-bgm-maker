@@ -70,6 +70,7 @@
     <div class="btns">
       <button id="genBtn">生成する</button>
       <button id="playBtn" class="sub" disabled>▶ ループ試聴</button>
+      <div style="margin-top:10px"><div style="height:10px;background:#262b36;border-radius:5px;overflow:hidden"><div id="tlFill" style="height:100%;width:0%;background:var(--acc);transition:width .05s linear"></div></div><div class="meta" id="tlPos"></div></div>
       <button id="stopBtn" class="sub" disabled>■ 停止</button>
     </div>
     <div class="btns">
@@ -442,8 +443,8 @@ function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5; v2 v
   let pk=0; for(const v of d) pk=Math.max(pk,Math.abs(v)); if(pk>0) for(let i=0;i<d.length;i++) d[i]=d[i]/pk*0.95;
   return b;
 }
-function scheduleNote(ctx, dest, tr, note, stepDur, taste){
-  const t0 = note.step * stepDur, dur = Math.max(.03, note.len * stepDur * .92);
+function scheduleNote(ctx, dest, tr, note, stepDur, taste, baseStep=0, baseTime=0){
+  const t0 = baseTime + (note.step - baseStep) * stepDur, dur = Math.max(.03, note.len * stepDur * .92);
   const g = ctx.createGain(); g.connect(dest);
   const vel = note.vel ?? .7;
   const playOsc = (type, freq, peak, attack, decayTo)=>{
@@ -563,6 +564,7 @@ function showTracks(){
     vol.title="パート音量";
     vol.onchange=async()=>{ if(!currentScore.meta.gains) currentScore.meta.gains={};
       currentScore.meta.gains[tr.id]=parseInt(vol.value,10)/100;
+      if(live && live.trackGains.has(tr.id)) live.trackGains.get(tr.id).gain.setTargetAtTime(currentScore.meta.gains[tr.id], audioCtx.currentTime, .03);
       currentBuffer=await renderScore(currentScore); };
     btns.append(btn, regen, stem, vol);
     div.append(name,btns); el.appendChild(div);
@@ -672,10 +674,60 @@ function retroStateUpdate(){ const tri=$("expTri").checked, smp=$("expSmp").chec
   $("retroState").textContent = "構成：" + (!tri&&!smp ? "レトロ4ch（標準構成）" : (tri&&smp ? "5ch（拡張1＋2）" : tri ? "4ch＋三角波ベース" : "4ch＋サンプルドラム")); }
 $("expTri").onchange=retroStateUpdate; $("expSmp").onchange=retroStateUpdate;
 $("genBtn").onclick=doGenerate;
-$("playBtn").onclick=()=>{ const ctx=ensureCtx(); ctx.resume(); stopPlay();
-  playSrc=ctx.createBufferSource(); playSrc.buffer=currentBuffer; playSrc.loop=true; playSrc.connect(ctx.destination); playSrc.start();
-  $("stopBtn").disabled=false; };
-function stopPlay(){ if(playSrc){ try{playSrc.stop()}catch(e){} playSrc=null; } $("stopBtn").disabled=true; }
+/* ---- live playback: look-ahead step scheduler. Edits (regen / volume / mute / BPM)
+   are read at schedule time, so they apply from the next step while playing. ---- */
+let live=null;
+function startLive(){
+  const ctx=ensureCtx(); ctx.resume(); stopPlay();
+  const master=ctx.createGain(); master.gain.value=.9; master.connect(ctx.destination);
+  live={ master, trackGains:new Map(), nextStep:0, nextTime:ctx.currentTime+0.06, stepTimes:[], timer:null, raf:0 };
+  live.timer=setInterval(schedTick, 25);
+  drawPlayhead();
+  $("stopBtn").disabled=false;
+}
+function schedTick(){
+  if(!live || !currentScore) return;
+  const ctx=audioCtx, total=currentScore.meta.totalSteps;
+  while(live.nextTime < ctx.currentTime + 0.12){
+    const s = live.nextStep % total;
+    const stepDur = 60/currentScore.meta.bpm/4;
+    const taste = TASTES[currentScore.meta.taste];
+    for(const tr of currentScore.tracks){
+      if(muted.has(tr.id)) continue;
+      let dest = live.trackGains.get(tr.id);
+      if(!dest){ dest=ctx.createGain(); dest.gain.value=(currentScore.meta.gains && currentScore.meta.gains[tr.id]!==undefined)? currentScore.meta.gains[tr.id] : 1; dest.connect(live.master); live.trackGains.set(tr.id, dest); }
+      for(const note of tr.notes) if(note.step===s) scheduleNote(ctx, dest, tr, note, stepDur, taste, s, live.nextTime);
+    }
+    live.stepTimes.push({step:s, time:live.nextTime});
+    if(live.stepTimes.length > total*2+64) live.stepTimes.splice(0, 64);
+    live.nextTime += stepDur; live.nextStep++;
+  }
+}
+function drawPlayhead(){
+  if(!live) return;
+  const now=audioCtx.currentTime, arr=live.stepTimes;
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i].time<=now){
+      const cur=arr[i], nxt=arr[i+1];
+      const total=currentScore.meta.totalSteps;
+      const frac = nxt ? Math.min(1,(now-cur.time)/Math.max(.01,nxt.time-cur.time)) : 0;
+      $("tlFill").style.width=((cur.step+frac)/total*100).toFixed(1)+"%";
+      $("tlPos").textContent="再生中： 小節 "+(Math.floor(cur.step/16)+1)+" / "+(total/16)+"（ステップ "+(cur.step+1)+" / "+total+"）";
+      break;
+    }
+  }
+  live.raf=requestAnimationFrame(drawPlayhead);
+}
+$("playBtn").onclick=startLive;
+function stopPlay(){
+  if(live){ clearInterval(live.timer); cancelAnimationFrame(live.raf);
+    const m=live.master, ctx=audioCtx;
+    try{ m.gain.setTargetAtTime(0, ctx.currentTime, .02); setTimeout(()=>{ try{m.disconnect()}catch(e){} },150); }catch(e){}
+    live=null; }
+  if(playSrc){ try{playSrc.stop()}catch(e){} playSrc=null; }
+  $("stopBtn").disabled=true;
+  const f=$("tlFill"), pos=$("tlPos"); if(f) f.style.width="0%"; if(pos) pos.textContent="";
+}
 $("stopBtn").onclick=stopPlay;
 $("wavBtn").onclick=()=>download(bufferToWav(currentBuffer), scoreFilename("wav"));
 $("midiBtn").onclick=()=>download(new Blob([scoreToMidi(currentScore)],{type:"audio/midi"}), scoreFilename("mid"));
