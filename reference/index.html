@@ -429,8 +429,18 @@ function noiseBuffer(ctx, sec){
 function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5 recipes, approximated)
   const sr=ctx.sampleRate, dur= kind==="kick"? .25 : .18;
   const b=ctx.createBuffer(1, Math.ceil(sr*dur), sr), d=b.getChannelData(0);
-  if(kind==="kick"){ for(let i=0;i<d.length;i++){ const t=i/sr; const f=45+(120-45)*Math.exp(-t/0.03); const ph=2*Math.PI*(45*t + (75)*(0.03)*(1-Math.exp(-t/0.03))); d[i]=Math.sin(ph)*Math.exp(-t/0.07)*0.9; } }
-  else { for(let i=0;i<d.length;i++){ const t=i/sr; d[i]=(Math.random()*2-1)*Math.exp(-t/0.05)*0.7 + Math.sin(2*Math.PI*190*t)*Math.exp(-t/0.04)*0.3; } }
+  if(kind==="kick"){ // pitch drop 150->48Hz + harmonic body so it reads as a thump on small speakers too
+    let ph=0; for(let i=0;i<d.length;i++){ const t=i/sr; const f=48+(150-48)*Math.exp(-t/0.028); ph+=2*Math.PI*f/sr;
+      d[i]=Math.sin(ph)*Math.exp(-t/0.085) + Math.sin(2*ph)*0.32*Math.exp(-t/0.05); }
+    let pk=0; for(const v of d) pk=Math.max(pk,Math.abs(v)); if(pk>0) for(let i=0;i<d.length;i++) d[i]=d[i]/pk*0.95;
+  }
+  else { // band-limited noise (less metallic) + shorter, quieter body tone
+    let lp1=0, lp2=0; const a1=1-Math.exp(-2*Math.PI*5200/sr), a2=1-Math.exp(-2*Math.PI*1100/sr);
+    for(let i=0;i<d.length;i++){ const t=i/sr; const w=Math.random()*2-1;
+      lp1+=a1*(w-lp1); lp2+=a2*(w-lp2); const band=lp1-lp2;
+      d[i]=band*Math.exp(-t/0.055)*1.6 + Math.sin(2*Math.PI*185*t)*Math.exp(-t/0.03)*0.22; }
+    let pk=0; for(const v of d) pk=Math.max(pk,Math.abs(v)); if(pk>0) for(let i=0;i<d.length;i++) d[i]=d[i]/pk*0.9;
+  }
   return b;
 }
 function scheduleNote(ctx, dest, tr, note, stepDur, taste){
