@@ -40,11 +40,11 @@
 <main>
   <section class="card">
     <h2>BGMを作る</h2>
-    <label>テーマ／用途</label>
+    <label>タイトル</label>
     <input id="theme" type="text" value="森のRPGの街" maxlength="60">
     <label>種（シード）</label>
     <input id="seed" type="number" min="0" max="2147483647" placeholder="空欄なら生成のたびにランダム">
-    <div class="meta">種は譜面データに記録されます。同じテーマ・設定・種なら同じ曲を再現でき、空欄で生成すると人と被らない曲になります。</div>
+    <div class="meta">タイトルは曲名として保存され、種の材料にもなります。曲の内容はタイトルではなく、モード・テイスト・設定と種で決まります。種は譜面データに記録され、同じタイトル・設定・種なら同じ曲を再現できます。</div>
     <label>モード</label>
     <select id="mode">
       <option value="standard">スタンダード</option>
