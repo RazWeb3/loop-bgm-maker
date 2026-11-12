@@ -218,11 +218,17 @@ function bassNotes(ctx, rand, baseMidi){
   }
   return notes;
 }
-function drumNotes(ctx){
+function drumNotes(ctx, rand){
   const notes=[];
   for(let s=0;s<ctx.totalSteps;s++){
     if(s%4===2) notes.push({step:s, midi:2, len:2, vel:.8});
     else if(s%2===0) notes.push({step:s, midi:1, len:1, vel:.5});
+  }
+  if(rand){ // ghost hits on free steps (1,5,9,13 of each bar); pattern depends on the track seed
+    for(let b=0;b<ctx.bars;b++) for(const off of [1,5,9,13]){
+      if(rand()<.45) notes.push({step:b*16+off, midi:1, len:1, vel:.3});
+    }
+    notes.sort((a,b2)=>a.step-b2.step);
   }
   return notes;
 }
@@ -238,26 +244,36 @@ function buildTrack(ctx, opts, trackId){
   switch(trackId){
     case "melody": return {id:"melody", role:"melody", instrument:"lead", notes:melodyNotes(ctx, trackRng(ctx,opts,"melody"), R)};
     case "chords": { const tr={id:"chords", role:"chords", instrument:"pad", notes:[]};
-      for(let b=0;b<ctx.bars;b++) for(const m of chordNotes(R-12, S, ctx.chords[b].degree, 4)) tr.notes.push({step:b*16, midi:m, len:16, vel:.4});
+      const tv=((opts.trackVariants&&opts.trackVariants["chords"])||0)%3;
+      for(let b=0;b<ctx.bars;b++){ const cn=chordNotes(R-12, S, ctx.chords[b].degree, 4);
+        if(tv===1){ cn.forEach((m,i)=>tr.notes.push({step:b*16+i*2, midi:m, len:10, vel:.42})); }
+        else if(tv===2){ const inv=[cn[1],cn[2],cn[3],cn[0]+12]; for(const m of inv) tr.notes.push({step:b*16, midi:m, len:16, vel:.4}); }
+        else for(const m of cn) tr.notes.push({step:b*16, midi:m, len:16, vel:.4}); }
       return tr; }
     case "bass": return {id:"bass", role:"bass", instrument:"synthbass", notes:bassNotes(ctx, trackRng(ctx,opts,"bass"), R-24)};
-    case "drums": return {id:"drums", role:"drums", instrument:"noise", notes:drumNotes(ctx)};
+    case "drums": return {id:"drums", role:"drums", instrument:"noise", notes:drumNotes(ctx, trackRng(ctx,opts,"drums"))};
     case "ch1": { const tr={id:"ch1", role:"melody", instrument:"pulse", duty:.25, notes:melodyNotes(ctx, trackRng(ctx,opts,"ch1"), R)}; return tr; }
     case "ch2": { const tr={id:"ch2", role:"harmony", instrument:"pulse", duty:.5, notes:[]};
+      const tv=((opts.trackVariants&&opts.trackVariants["ch2"])||0)%3;
       for(let b=0;b<ctx.bars;b++){ const ct=chordNotes(R, S, ctx.chords[b].degree, 3);
-        for(let s=0;s<16;s+=2) tr.notes.push({step:b*16+s, midi:ct[(s/2)%3]+12, len:2, vel:.4}); }
+        for(let s=0;s<16;s+=2){ const k=s/2; const idx = tv===1 ? 2-(k%3) : tv===2 ? [0,1,2,1][k%4] : k%3;
+          tr.notes.push({step:b*16+s, midi:ct[idx]+12, len:2, vel:.4}); } }
       return tr; }
     case "ch3": return {id:"ch3", role:"bass", instrument:opts.expTri ? "triangle" : "wave", notes:bassNotes(ctx, trackRng(ctx,opts,"ch3"), R-24)};
-    case "ch4": return {id:"ch4", role:"drums", instrument:"noise", notes:drumNotes(ctx)};
+    case "ch4": return {id:"ch4", role:"drums", instrument:"noise", notes:drumNotes(ctx, trackRng(ctx,opts,"ch4"))};
     case "ch5": { const tr={id:"ch5", role:"sampledrums", instrument:"sample", notes:[]};
-      for(let s=0;s<ctx.totalSteps;s+=8){ tr.notes.push({step:s, midi:1, len:2, vel:.9}); if(s%16===8) tr.notes.push({step:s, midi:2, len:2, vel:.8}); }
-      return tr; }
+      const tv=((opts.trackVariants&&opts.trackVariants["ch5"])||0)%2;
+      for(let s=0;s<ctx.totalSteps;s+=8){ tr.notes.push({step:s+(tv?4:0), midi:1, len:2, vel:.9}); if(s%16===8) tr.notes.push({step:s, midi:2, len:2, vel:.8}); }
+      tr.notes.sort((a,b2)=>a.step-b2.step); return tr; }
     case "piano": { const tr={id:"piano", role:"piano", instrument:"piano", notes:melodyNotes(ctx, trackRng(ctx,opts,"piano"), R)};
       for(let b=0;b<ctx.bars;b++){ const ct=chordNotes(R-24, S, ctx.chords[b].degree, 3);
         tr.notes.push({step:b*16, midi:ct[0], len:8, vel:.5},{step:b*16, midi:ct[1], len:8, vel:.42},{step:b*16+8, midi:ct[2], len:6, vel:.45}); }
       tr.notes.sort((a,b2)=>a.step-b2.step); return tr; }
     case "pad": { const tr={id:"pad", role:"pad", instrument:"pad", notes:[]};
-      for(let b=0;b<ctx.bars;b+=2) for(const m of chordNotes(R-12, S, ctx.chords[b].degree, 4)) tr.notes.push({step:b*16, midi:m, len:32, vel:.35});
+      const tv=((opts.trackVariants&&opts.trackVariants["pad"])||0)%2;
+      for(let b=0;b<ctx.bars;b+=2){ const cn=chordNotes(R-12, S, ctx.chords[b].degree, 4);
+        const use = tv ? [cn[1],cn[2],cn[3],cn[0]+12] : cn;
+        for(const m of use) tr.notes.push({step:b*16, midi:m, len:32, vel:.35}); }
       return tr; }
     case "sparse": { const tr={id:"sparse", role:"melody", instrument:"bell", notes:melodyNotes(ctx, trackRng(ctx,opts,"sparse"), R)};
       tr.notes = tr.notes.filter((_,i)=>i%3===0).map(n=>({...n, len:8, vel:n.vel*.7})); return tr; }

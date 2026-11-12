@@ -88,5 +88,21 @@ for (const mo of modes) {
   ok(validateScore(r1).every(c => c.ok), "retro regen valid (mono + constraints)");
   ok(JSON.stringify(r1.tracks.find(t => t.id === "ch3").notes) === JSON.stringify(r0.tracks.find(t => t.id === "ch3").notes), "retro regen keeps ch3");
 }
+// 6) stage 3 fix: regenerating ANY track must change that track (no no-op parts)
+{
+  const configs=[{mode:"standard"},{mode:"retro"},{mode:"retro",expTri:true,expSmp:true},{mode:"piano"},{mode:"ambient"}];
+  for(const cfg of configs){
+    const o={theme:"全パート再生成", taste:"pop", bpm:100, bars:8, key:"C:major", variant:0, trackVariants:{}, ...cfg};
+    const s0=generateScore(o);
+    for(const tr of s0.tracks){
+      const s1=regenerateTrack(s0, {...o, trackVariants:{[tr.id]:1}}, tr.id);
+      const nt=s1.tracks.find(x=>x.id===tr.id);
+      ok(JSON.stringify(nt.notes)!==JSON.stringify(tr.notes), `${cfg.mode}/${tr.id} changes on regen`);
+      ok(validateScore(s1).every(c=>c.ok), `${cfg.mode}/${tr.id} regen valid`);
+      for(const other of s0.tracks){ if(other.id!==tr.id)
+        ok(JSON.stringify(s1.tracks.find(x=>x.id===other.id).notes)===JSON.stringify(other.notes), `${cfg.mode} regen ${tr.id} keeps ${other.id}`); }
+    }
+  }
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
