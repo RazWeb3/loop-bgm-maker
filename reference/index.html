@@ -426,21 +426,20 @@ function noiseBuffer(ctx, sec){
   const b=ctx.createBuffer(1, Math.ceil(ctx.sampleRate*sec), ctx.sampleRate);
   const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b;
 }
-function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5 recipes, approximated)
+function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5; v2 voicing tuned by listening: energy in the band small speakers can reproduce)
   const sr=ctx.sampleRate, dur= kind==="kick"? .25 : .18;
   const b=ctx.createBuffer(1, Math.ceil(sr*dur), sr), d=b.getChannelData(0);
-  if(kind==="kick"){ // pitch drop 150->48Hz + harmonic body so it reads as a thump on small speakers too
-    let ph=0; for(let i=0;i<d.length;i++){ const t=i/sr; const f=48+(150-48)*Math.exp(-t/0.028); ph+=2*Math.PI*f/sr;
-      d[i]=Math.sin(ph)*Math.exp(-t/0.085) + Math.sin(2*ph)*0.32*Math.exp(-t/0.05); }
-    let pk=0; for(const v of d) pk=Math.max(pk,Math.abs(v)); if(pk>0) for(let i=0;i<d.length;i++) d[i]=d[i]/pk*0.95;
-  }
-  else { // band-limited noise (less metallic) + shorter, quieter body tone
-    let lp1=0, lp2=0; const a1=1-Math.exp(-2*Math.PI*5200/sr), a2=1-Math.exp(-2*Math.PI*1100/sr);
+  if(kind==="kick"){ // pitch drop from an audible height + harmonic body + woody knock
+    let ph=0; for(let i=0;i<d.length;i++){ const t=i/sr; const f=110+(620-110)*Math.exp(-t/0.02); ph+=2*Math.PI*f/sr;
+      d[i]=(Math.sin(ph)+0.45*Math.sin(2*ph)+0.22*Math.sin(3*ph))*Math.exp(-t/0.09) + Math.sin(2*Math.PI*280*t)*Math.exp(-t/0.012)*0.5; }
+  } else { // band-limited noise centred ~1.7kHz (no metallic highs) + strong short body tone 215->175Hz
+    let lp1=0, lp1b=0, lp2=0, ph=0; const a1=1-Math.exp(-2*Math.PI*2400/sr), a2=1-Math.exp(-2*Math.PI*700/sr);
     for(let i=0;i<d.length;i++){ const t=i/sr; const w=Math.random()*2-1;
-      lp1+=a1*(w-lp1); lp2+=a2*(w-lp2); const band=lp1-lp2;
-      d[i]=band*Math.exp(-t/0.055)*1.6 + Math.sin(2*Math.PI*185*t)*Math.exp(-t/0.03)*0.22; }
-    let pk=0; for(const v of d) pk=Math.max(pk,Math.abs(v)); if(pk>0) for(let i=0;i<d.length;i++) d[i]=d[i]/pk*0.9;
+      lp1+=a1*(w-lp1); lp1b+=a1*(lp1-lp1b); lp2+=a2*(w-lp2); const band=lp1b-lp2;
+      const f=175+(215-175)*Math.exp(-t/0.03); ph+=2*Math.PI*f/sr;
+      d[i]=band*Math.exp(-t/0.05)*1.4 + Math.sin(ph)*Math.exp(-t/0.03)*0.55; }
   }
+  let pk=0; for(const v of d) pk=Math.max(pk,Math.abs(v)); if(pk>0) for(let i=0;i<d.length;i++) d[i]=d[i]/pk*0.95;
   return b;
 }
 function scheduleNote(ctx, dest, tr, note, stepDur, taste){
