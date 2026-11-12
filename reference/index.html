@@ -107,7 +107,13 @@
     </div>
     <div class="card" style="margin-top:14px">
       <h2>ギャラリー（この端末の中だけに保存）</h2>
+      <div id="galleryMsg" class="meta"></div>
       <div id="gallery" class="meta">保存された作品はまだありません。生成して「ギャラリーに保存」を押すと、譜面データがこのブラウザ内に保存されます（外部送信なし）。</div>
+      <div class="btns">
+        <button id="galExport" class="sub">ギャラリーをJSONで書き出す</button>
+        <button id="galImportBtn" class="sub">ギャラリーJSONを読み込む</button>
+        <input id="galImport" type="file" accept="application/json" style="display:none">
+      </div>
     </div>
     <div class="card" style="margin-top:14px">
       <h2>パート構成</h2>
@@ -503,8 +509,18 @@ async function doGenerate(){
 }
 /* ---- gallery (localStorage only; nothing leaves the device) ---- */
 const GKEY="lbm-gallery-v1";
-function loadGallery(){ try{ return JSON.parse(localStorage.getItem(GKEY)||"[]"); }catch(e){ return []; } }
-function storeGallery(list){ localStorage.setItem(GKEY, JSON.stringify(list)); }
+let storageOK=false;
+try{ localStorage.setItem("__lbm_probe","1"); localStorage.removeItem("__lbm_probe"); storageOK=true; }catch(e){ storageOK=false; }
+let memGallery=[];
+function loadGallery(){
+  if(storageOK){ try{ return JSON.parse(localStorage.getItem(GKEY)||"[]"); }catch(e){ return []; } }
+  return memGallery;
+}
+function storeGallery(list){
+  if(storageOK){ try{ localStorage.setItem(GKEY, JSON.stringify(list)); return true; }catch(e){ storageOK=false; } }
+  memGallery=list; return false;
+}
+function galleryNote(msg){ $("galleryMsg").textContent = msg; }
 function showGallery(){
   const el=$("gallery"); const list=loadGallery();
   if(!list.length){ el.innerHTML="保存された作品はまだありません。生成して「ギャラリーに保存」を押すと、譜面データがこのブラウザ内に保存されます（外部送信なし）。"; return; }
@@ -582,9 +598,21 @@ $("wavBtn").onclick=()=>download(bufferToWav(currentBuffer), scoreFilename("wav"
 $("midiBtn").onclick=()=>download(new Blob([scoreToMidi(currentScore)],{type:"audio/midi"}), scoreFilename("mid"));
 $("saveBtn").onclick=()=>{ const list=loadGallery();
   list.unshift({id:Date.now(), savedAt:new Date().toLocaleString("ja-JP"), score:currentScore});
-  storeGallery(list.slice(0,30)); showGallery(); };
+  const persisted=storeGallery(list.slice(0,30)); showGallery();
+  galleryNote(persisted ? "保存しました。このブラウザ内に残り、再読み込みしても消えません。"
+    : "この表示環境ではブラウザ内保存が使えないため、開いている間だけ保持しました。残したい場合は「ギャラリーをJSONで書き出す」でファイルとして保存してください。"); };
+$("galExport").onclick=()=>{ download(new Blob([JSON.stringify(loadGallery(),null,1)],{type:"application/json"}), "bgm-gallery.json"); };
+$("galImportBtn").onclick=()=>$("galImport").click();
+$("galImport").onchange=async()=>{ const f=$("galImport").files[0]; if(!f) return;
+  try{ const list=JSON.parse(await f.text());
+    if(!Array.isArray(list)) throw new Error("not a gallery");
+    const persisted=storeGallery(list.slice(0,30)); showGallery();
+    galleryNote(persisted ? `ギャラリーを読み込みました（${list.length}件）。` : `ギャラリーを読み込みました（${list.length}件、開いている間だけ保持）。`);
+  }catch(e){ galleryNote("ギャラリーJSONの読み込みに失敗しました。書き出したファイルを選んでください。"); }
+  $("galImport").value=""; };
 $("batchBtn").onclick=batchValidate;
 showGallery();
+if(!storageOK) galleryNote("この表示環境ではブラウザ内保存が使えません。ギャラリーは開いている間だけ保持され、JSON書き出しでファイルとして残せます。");
 $("jsonBtn").onclick=()=>download(new Blob([JSON.stringify(currentScore,null,1)],{type:"application/json"}), scoreFilename("json"));
 $("sePlay").onclick=async()=>{ const buf=await renderSE($("seCat").value); const ctx=ensureCtx(); ctx.resume();
   const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start(); };
