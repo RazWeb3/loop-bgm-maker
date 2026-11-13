@@ -28,12 +28,15 @@
   .track{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:7px 0;font-size:13px}
   .ge-wrap{overflow-x:auto}
   .ge-grid{display:grid;gap:2px;min-width:640px}
-  .ge-cell{height:20px;background:#171b24;border:1px solid #232833;border-radius:3px;cursor:pointer;padding:0}
+  .ge-cell{height:26px;background:#171b24;border:1px solid #232833;border-radius:3px;cursor:pointer;padding:0}
   .ge-cell:hover{border-color:var(--acc)}
   .ge-cell.on{background:var(--acc);border-color:var(--acc)}
   .ge-cell.cont{background:#6d5322;border-color:#6d5322}
   .ge-cell.beat{border-left:2px solid #39415a}
-  .ge-lab{font-size:11px;color:var(--mut);display:flex;align-items:center;justify-content:flex-end;padding-right:6px;height:20px}
+  .ge-lab{font-size:11px;color:var(--mut);display:flex;align-items:center;justify-content:flex-end;padding-right:6px;height:26px}
+  .ge-timeline{display:flex;gap:4px;margin-top:6px}
+  .ge-seg{flex:1;text-align:center;padding:6px 0;background:#171b24;border:1px solid #232833;border-radius:6px;cursor:pointer;font-size:12px;color:var(--mut)}
+  .ge-seg.cur{background:var(--acc);color:#151310;border-color:var(--acc);font-weight:700}
   .track button{padding:4px 10px;font-size:12px}
   .track .muted{opacity:.45}
   pre{background:#0b0c0f;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11px;overflow:auto;max-height:220px}
@@ -81,7 +84,6 @@
     <div class="btns">
       <button id="genBtn">生成する</button>
       <button id="playBtn" class="sub" disabled>▶ ループ試聴</button>
-      <div style="margin-top:10px"><div style="height:10px;background:#262b36;border-radius:5px;overflow:hidden"><div id="tlFill" style="height:100%;width:0%;background:var(--acc);transition:width .05s linear"></div></div><div class="meta" id="tlPos"></div></div>
       <button id="stopBtn" class="sub" disabled>■ 停止</button>
     </div>
     <div class="btns">
@@ -124,8 +126,29 @@
       <div id="batchResult" class="meta"></div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h2>パート構成</h2>
-      <div id="tracks" class="meta">生成するとパートが表示されます。ミュートは試聴とWAVに反映されます。</div>
+      <h2>細かな編集（生成後に直す）</h2>
+      <div id="tlPos" class="meta">停止中</div>
+      <div style="height:10px;background:#262b36;border-radius:5px;overflow:hidden;margin:6px 0"><div id="tlFill" style="height:100%;width:0%;background:var(--acc);transition:width .05s linear"></div></div>
+      <div id="geTimeline" class="ge-timeline"></div>
+      <div class="meta" style="margin-top:6px"><label><input type="checkbox" id="geFollow"> 再生中の小節に自動で追従</label></div>
+      <div id="geInfo" class="meta" style="margin-top:6px">生成すると、ここで音符単位の編集ができるようになります。</div>
+      <div class="row" style="margin-top:8px">
+        <div><label>編集するパート</label><select id="geTrack"></select></div>
+        <div><label>小節</label><select id="geBar"></select></div>
+      </div>
+      <div class="ge-wrap" style="margin-top:10px"><div id="geGrid" class="ge-grid"></div></div>
+      <div class="row" style="margin-top:10px">
+        <div><label>BPM変更</label><input id="geBpm" type="number" min="40" max="200" value="100"></div>
+        <div><label>選択パートの強さ（この小節）</label><input id="geVel" type="range" min="10" max="150" value="75" style="width:130px"></div>
+      </div>
+      <div class="btns">
+        <button id="geBpmBtn" class="sub">BPMを反映する</button>
+        <button id="geDown" class="sub">半音下げる</button>
+        <button id="geUp" class="sub">半音上げる</button>
+        <button id="geClear" class="sub">この小節を消す</button>
+        <button id="geUndo" class="sub">元に戻す</button>
+      </div>
+      <div class="meta">タイムライン（数字は小節番号）をタップすると、その小節の先頭から再生します。「ループ試聴」で再生したまま、マスの編集・パートの再生成・音量・BPM変更ができ、変更は次の音からそのまま反映されます。半音の移動と強さは、選択中のパートの表示中の小節に適用されます。</div>
     </div>
     <div class="card" style="margin-top:14px">
       <h2>ギャラリー（この端末の中だけに保存）</h2>
@@ -138,21 +161,19 @@
       </div>
     </div>
     <div class="card" style="margin-top:14px">
+      <h2>パート構成</h2>
+      <div id="tracks" class="meta">生成するとパートが表示されます。ミュートは試聴とWAVに反映されます。</div>
+    </div>
+    <div class="card" style="margin-top:14px">
       <h2>譜面データ（JSON・正本）</h2>
       <pre id="scoreView">—</pre>
     </div>
+    <div class="card" style="margin-top:14px">
+      <h2>AI向けガイド</h2>
+      <div class="meta">AIにイメージを伝えて設定してもらう場合は、<a href="/loop-bgm-maker/ai/core.md">AI向けガイド（core.md）</a>をAIに読ませてください。設定はURLパラメータでも渡せます（例：<code>?taste=battle&amp;bpm=150&amp;key=A:minor&amp;gen=1</code>）。対応パラメータ：title / mode / taste / bpm / bars / key / seed / tri / smp / gen。</div>
+    </div>
   </section>
 </main>
-<section class="card" style="max-width:1180px;margin:0 auto 24px">
-  <h2>細かな編集（生成後に直す）</h2>
-  <div id="geInfo" class="meta">生成すると、ここで音符をマス目で直せます。パートと小節を選んでマスをタップすると、その位置の音符を置く／消すができます（置く音符は長さ2ステップ・強さ0.75）。編集は試聴・WAV・MIDI・譜面JSONすべてに反映され、再生中は次の音から反映されます。</div>
-  <div class="row" style="margin-top:8px">
-    <div><label>編集するパート</label><select id="geTrack"></select></div>
-    <div><label>小節</label><select id="geBar"></select></div>
-  </div>
-  <div class="ge-wrap" style="margin-top:10px"><div id="geGrid" class="ge-grid"></div></div>
-</section>
-
 <footer>
   生成物について：本メーカーは生成物に権利を主張しません。ただし権利が発生するか、第三者の権利を侵害していないかの保証はしません。公開・利用の前に、ご自身で試聴し既存曲との類似がないか確認してください（指示書 §10）。<br>
   本試作の生成はブラウザ内で完結し、入力したテーマや生成物を外部に送信しません。
@@ -711,9 +732,9 @@ function geRowsFor(tr){
   const rootSemi=NOTE_NAMES[currentScore.meta.key.root], scale=SCALES[currentScore.meta.key.scale];
   let lo=127, hi=0; for(const n of tr.notes){ lo=Math.min(lo,n.midi); hi=Math.max(hi,n.midi); }
   if(hi===0){ lo=60; hi=72; }
-  let rows=[];
-  for(let p=lo-12;p<=hi+12;p++){ if(scale.includes(((p-rootSemi)%12+12)%12)) rows.push(p); }
-  if(rows.length>25) rows=rows.filter(p=>p>=lo-7 && p<=hi+7);
+  const collect=(pad)=>{ const r=[]; for(let p=lo-pad;p<=hi+pad;p++){ if(scale.includes(((p-rootSemi)%12+12)%12)) r.push(p); } return r; };
+  let rows=collect(7);
+  if(rows.length>21) rows=collect(3);
   return rows.sort((a,b)=>b-a).map(m=>({midi:m, label: NOTE_DISP[((m%12)+12)%12]+(Math.floor(m/12)-1)}));
 }
 function renderGridEditor(){
@@ -729,7 +750,7 @@ function renderGridEditor(){
   $("geInfo").textContent="「"+currentScore.meta.title+"」を編集中。パートと小節を選んでマスをタップしてください。置く音符は長さ2ステップ・強さ0.75です。編集は試聴・WAV・MIDI・譜面JSONすべてに反映され、再生中は次の音から反映されます。";
   const tr=currentScore.tracks.find(x=>x.id===geTrackId);
   const rows=geRowsFor(tr), start=geBar*16;
-  grid.style.gridTemplateColumns="46px repeat(16, 1fr)";
+  grid.style.gridTemplateColumns="52px repeat(16, 1fr)";
   grid.innerHTML="";
   for(const r of rows){
     const lab=document.createElement("div"); lab.className="ge-lab"; lab.textContent=r.label; grid.appendChild(lab);
@@ -742,8 +763,44 @@ function renderGridEditor(){
       grid.appendChild(cell);
     }
   }
+  $("geBpm").value=currentScore.meta.bpm;
+  renderTimeline();
 }
+const geUndoStack=[];
+function gePushUndo(){ geUndoStack.push(JSON.stringify(currentScore)); if(geUndoStack.length>30) geUndoStack.shift(); }
+function renderTimeline(){
+  const tl=$("geTimeline"); if(!tl) return;
+  tl.innerHTML="";
+  if(!currentScore) return;
+  for(let b=0;b<currentScore.meta.bars;b++){
+    const d=document.createElement("div"); d.className="ge-seg"+(window._curBar===b?" cur":""); d.textContent=b+1;
+    d.onclick=()=>{ geBar=b; renderGridEditor();
+      if(live && audioCtx){ live.nextStep=b*16; live.nextTime=audioCtx.currentTime+0.05; live.stepTimes.length=0; } };
+    tl.appendChild(d);
+  }
+}
+function geSelectedTrack(){ return currentScore ? currentScore.tracks.find(x=>x.id===geTrackId) : null; }
+$("geUndo").onclick=async()=>{ const s=geUndoStack.pop(); if(!s) return; currentScore=JSON.parse(s); await refreshAfterEdit(); };
+$("geClear").onclick=async()=>{ const tr=geSelectedTrack(); if(!tr) return; gePushUndo();
+  const st=geBar*16; tr.notes=tr.notes.filter(n=>!(n.step>=st && n.step<st+16)); await refreshAfterEdit(); };
+$("geUp").onclick=async()=>geTranspose(1);
+$("geDown").onclick=async()=>geTranspose(-1);
+async function geTranspose(d){
+  const tr=geSelectedTrack(); if(!tr || tr.instrument==="noise" || tr.instrument==="sample") return;
+  gePushUndo(); const st=geBar*16;
+  for(const n of tr.notes) if(n.step>=st && n.step<st+16) n.midi=Math.max(0, Math.min(127, n.midi+d));
+  await refreshAfterEdit();
+}
+$("geVel").onchange=async()=>{ const tr=geSelectedTrack(); if(!tr) return; gePushUndo();
+  const st=geBar*16, v=parseInt($("geVel").value,10)/100;
+  for(const n of tr.notes) if(n.step>=st && n.step<st+16) n.vel=v;
+  await refreshAfterEdit(); };
+$("geBpmBtn").onclick=async()=>{ if(!currentScore) return;
+  const v=Math.max(40, Math.min(200, parseInt($("geBpm").value||"100",10)));
+  currentScore.meta.bpm=v; await refreshAfterEdit(); };
+
 async function geToggle(tr, step, midi){
+  gePushUndo();
   const idx=tr.notes.findIndex(n=>n.step===step && n.midi===midi);
   if(idx>=0) tr.notes.splice(idx,1);
   else{
@@ -781,7 +838,7 @@ async function startLive(){
   try{ await ctx.resume(); }catch(e){}
   if(ctx.state!=="running"){ $("info").textContent="音声を開始できませんでした。画面を一度タップしてから、もう一度「ループ試聴」を押してください。"; return; }
   const master=ctx.createGain(); master.gain.value=.9; master.connect(ctx.destination);
-  live={ master, trackGains:new Map(), nextStep:0, nextTime:ctx.currentTime+0.06, stepTimes:[], timer:null, raf:0 };
+  window._curBar=0; live={ master, trackGains:new Map(), nextStep:0, nextTime:ctx.currentTime+0.06, stepTimes:[], timer:null, raf:0 };
   live.timer=setInterval(schedTick, 25);
   drawPlayhead();
   $("stopBtn").disabled=false;
@@ -814,6 +871,10 @@ function drawPlayhead(){
       const frac = nxt ? Math.min(1,(now-cur.time)/Math.max(.01,nxt.time-cur.time)) : 0;
       $("tlFill").style.width=((cur.step+frac)/total*100).toFixed(1)+"%";
       $("tlPos").textContent="再生中： 小節 "+(Math.floor(cur.step/16)+1)+" / "+(total/16)+"（ステップ "+(cur.step+1)+" / "+total+"）";
+      const cb=Math.floor(cur.step/16);
+      if(window._curBar!==cb){ window._curBar=cb;
+        document.querySelectorAll(".ge-seg").forEach((el,i)=>el.classList.toggle("cur", i===cb));
+        if($("geFollow") && $("geFollow").checked && geBar!==cb){ geBar=cb; renderGridEditor(); } }
       break;
     }
   }
@@ -827,7 +888,7 @@ function stopPlay(){
     live=null; }
   if(playSrc){ try{playSrc.stop()}catch(e){} playSrc=null; }
   $("stopBtn").disabled=true;
-  const f=$("tlFill"), pos=$("tlPos"); if(f) f.style.width="0%"; if(pos) pos.textContent="";
+  const f=$("tlFill"), pos=$("tlPos"); if(f) f.style.width="0%"; if(pos) pos.textContent="停止中"; window._curBar=-1; document.querySelectorAll(".ge-seg").forEach(el=>el.classList.remove("cur"));
 }
 $("stopBtn").onclick=stopPlay;
 $("wavBtn").onclick=()=>download(bufferToWav(currentBuffer), scoreFilename("wav"));
