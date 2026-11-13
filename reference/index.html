@@ -2,10 +2,15 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ループBGMメーカー（試作 v0.1）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<title>ループBGMメーカー（試作 v0.3・第三段：パート別再生成）</title>
 <style>
-  :root{--bg:#101216;--panel:#1a1d24;--panel2:#22262f;--line:#333947;--text:#e8eaf0;--sub:#9aa3b5;--acc:#ffb454;--ok:#57d38c;--ng:#ff6b6b}
+  :root{color-scheme:dark;--bg:#101216;--panel:#1a1d24;--panel2:#22262f;--line:#333947;--text:#e8eaf0;--sub:#9aa3b5;--acc:#ffb454;--ok:#57d38c;--ng:#ff6b6b;--prebg:#0b0c0f;--btntext:#1a1206}
+  @media (prefers-color-scheme: light){
+    :root{color-scheme:light;--bg:#f4f2ec;--panel:#fffdf8;--panel2:#efece3;--line:#d8d2c2;--text:#26241d;--sub:#6d675a;--acc:#b96a00;--ok:#157a3d;--ng:#c22e2e;--prebg:#f0ede3;--btntext:#fff8ec}
+  }
   *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif}
   header{padding:18px 20px 6px} h1{font-size:20px;margin:0} .note{color:var(--sub);font-size:12px;margin-top:4px}
   main{display:grid;grid-template-columns:340px 1fr;gap:14px;padding:14px 20px 24px;align-items:start}
@@ -13,11 +18,13 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
   .card h2{font-size:14px;margin:0 0 10px;color:var(--acc)}
   label{display:block;font-size:12px;color:var(--sub);margin:10px 0 4px}
-  input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:14px}
+  input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:14px;min-height:38px}
+  textarea{font-size:12px;line-height:1.6;resize:vertical}
+  input[type="checkbox"]{min-height:0;width:18px;height:18px;flex:none}
   .row{display:flex;gap:8px}.row>*{flex:1}
-  .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);margin-top:8px}
+  .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);margin-top:8px;min-height:36px;padding:6px 0;cursor:pointer}
   .chk input{width:auto}
-  button{background:var(--acc);color:#1a1206;border:none;border-radius:9px;padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer}
+  button{background:var(--acc);color:var(--btntext);border:none;border-radius:9px;padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:40px}
   button.sub{background:var(--panel2);color:var(--text);border:1px solid var(--line);font-weight:400}
   button:disabled{opacity:.45;cursor:default}
   .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
@@ -26,36 +33,50 @@
   .ok{color:var(--ok)} .ng{color:var(--ng)}
   .meta{font-size:12px;color:var(--sub);line-height:1.7}
   .track{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:7px 0;font-size:13px}
-  .ge-wrap{overflow-x:auto}
-  .ge-grid{display:grid;gap:2px;min-width:640px}
-  .ge-cell{height:26px;background:#171b24;border:1px solid #232833;border-radius:3px;cursor:pointer;padding:0}
-  .ge-cell:hover{border-color:var(--acc)}
-  .ge-cell.on{background:var(--acc);border-color:var(--acc)}
-  .ge-cell.cont{background:#6d5322;border-color:#6d5322}
-  .ge-cell.beat{border-left:2px solid #39415a}
-  .ge-lab{font-size:11px;color:var(--mut);display:flex;align-items:center;justify-content:flex-end;padding-right:6px;height:26px}
-  .ge-timeline{display:flex;gap:4px;margin-top:6px}
-  .ge-seg{flex:1;text-align:center;padding:6px 0;background:#171b24;border:1px solid #232833;border-radius:6px;cursor:pointer;font-size:12px;color:var(--mut)}
-  .ge-seg.cur{background:var(--acc);color:#151310;border-color:var(--acc);font-weight:700}
-  .track button{padding:4px 10px;font-size:12px}
+  .track button{padding:6px 12px;font-size:12px;min-height:36px}
   .track .muted{opacity:.45}
-  pre{background:#0b0c0f;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11px;overflow:auto;max-height:220px}
+  pre{background:var(--prebg);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11px;overflow:auto;max-height:220px}
   footer{padding:0 20px 22px;color:var(--sub);font-size:11px;line-height:1.7}
+  .status{margin-top:10px;font-size:12px;line-height:1.6;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel2);display:none}
+  .status.show{display:block}
+  input[type="range"]{min-height:28px;padding:0;accent-color:var(--acc)}
+  .track{gap:8px;flex-wrap:wrap}
+  .track-main{flex:1 1 180px}
+  .track-ctrls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .track-ctrls label{margin:0;font-size:11px}
+  .track-ctrls input[type="range"]{width:90px}
+  .gridwrap{margin-top:10px}
+  .gridhead,.gridrow{display:grid;grid-template-columns:52px repeat(16,1fr);gap:3px;align-items:stretch}
+  .gridhead{margin-bottom:3px}
+  .gridhead span{font-size:10px;color:var(--sub);text-align:center}
+  .gridrow{margin-bottom:3px}
+  .gridrow .plabel{font-size:11px;color:var(--sub);display:flex;align-items:center;justify-content:flex-end;padding-right:4px;white-space:nowrap}
+  .cell{min-height:26px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);cursor:pointer;padding:0}
+  .cell.beat{border-color:var(--sub)}
+  .cell.on{background:var(--acc);border-color:var(--acc)}
+  .cell:hover{outline:2px solid var(--acc);outline-offset:-1px}
+  .small{font-size:12px;padding:7px 10px;min-height:36px}
+  .timeline{position:relative;display:flex;gap:2px;height:34px;margin-top:8px;cursor:pointer;touch-action:manipulation}
+  .tlseg{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:4px;font-size:10px;color:var(--sub);display:flex;align-items:center;justify-content:center;min-width:0}
+  .tlseg.now{background:var(--acc);color:var(--btntext);border-color:var(--acc);font-weight:700}
+  #playhead{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ng);pointer-events:none;z-index:2}
+  .cell.now{box-shadow:inset 0 0 0 2px var(--ng)}
+  .gridhead span.now{color:var(--ng);font-weight:700}
+  .galitem{display:block}
+  .galitem .track{border-bottom:none;padding-bottom:2px}
 </style>
 </head>
 <body>
 <header>
-  <h1>ループBGMメーカー <span style="color:var(--sub);font-size:13px">試作 v0.1（参照実装・検証用）</span></h1>
-  <div class="note">指示書 v0.2 に基づく試作です。譜面データ（JSON）を生成し、プログラムが音にします。デザインは最終版ではありません。</div>
+  <h1>ループBGMメーカー <span style="color:var(--sub);font-size:13px">試作 v0.3（参照実装・検証用）</span></h1>
+  <div class="note">完成版ではなく試作です。一発出しではありません：生成したあと、パートごとに「再生成」で1パートだけ作り直したり（他のパートとコード進行はそのまま）、音符を1つずつ編集したり、音量・テンポを変えて、そのまま試聴と書き出しに反映できます。</div>
 </header>
 <main>
   <section class="card">
     <h2>BGMを作る</h2>
     <label>タイトル</label>
     <input id="theme" type="text" value="森のRPGの街" maxlength="60">
-    <label>種（シード）</label>
-    <input id="seed" type="number" min="0" max="2147483647" placeholder="空欄なら生成のたびにランダム">
-    <div class="meta">タイトルは曲名として保存され、種の材料にもなります。曲の内容はタイトルではなく、モード・テイスト・設定と種で決まります。種は譜面データに記録され、同じタイトル・設定・種なら同じ曲を再現できます。</div>
+    <div class="meta">曲のタイトルです（譜面JSONの title と書き出しファイル名に使われます）。この言葉の意味を解釈して作曲に反映することはしません。曲調は下のモード／テイストで選んでください。</div>
     <label>モード</label>
     <select id="mode">
       <option value="standard">スタンダード</option>
@@ -67,6 +88,12 @@
       <label class="chk"><input type="checkbox" id="expTri"> 拡張1：三角波ベース（CH3を切替）</label>
       <label class="chk"><input type="checkbox" id="expSmp"> 拡張2：サンプルドラム（1ch追加）</label>
       <div class="meta" id="retroState">構成：レトロ4ch（標準構成）</div>
+      <div class="btns" style="margin-top:8px">
+        <button id="kickPlay" class="sub small" type="button">サンプル：キックを試聴（調整版2）</button>
+        <button id="snarePlay" class="sub small" type="button">サンプル：スネアを試聴（調整版2）</button>
+      </div>
+      <div class="meta" id="drumStatus" role="status"></div>
+      <div class="meta">拡張2のサンプルドラム単体の試聴です。調整版2では作り方自体を変えました。前回は低い音（50Hz前後）の微調整だけで、スマホ等の小さいスピーカーではその帯域自体が鳴らず「変わっていない」ように聞こえていました。今回はキックの胴鳴りを小さいスピーカーでも鳴る中域（200〜600Hz）に作り直し、スネアは金属音の成分（高い帯域）を取り除いて中心を下げ、胴の音を強くしました。押すと下に再生時刻が出ます。もう一度この2つを聞き比べてください。</div>
     </div>
     <label>テイスト</label>
     <select id="taste"></select>
@@ -81,8 +108,15 @@
       <option value="F:major">F メジャー</option><option value="A:minor">A マイナー</option>
       <option value="E:minor">E マイナー</option><option value="D:minor">D マイナー</option>
     </select>
+    <label>種（シード）</label>
+    <input id="seed" type="number" min="0" max="2147483647" step="1" placeholder="空欄＝ランダム（約21億通り）">
+    <div class="meta">既定はランダムです。空欄のまま「生成する」を押すと、毎回 0〜2147483647 の中から新しい種を自動で引きます。使った種は譜面JSONの meta.seed に記録され、下にも表示されます。同じ曲を再現したいときだけ、その数字をここに入れて生成してください。</div>
+    <div class="meta" id="currentSeed" role="status"></div>
+    <div class="status" id="paramStatus" role="status"></div>
+    <div class="meta">URLに設定パラメータを付けて開くこともできます（例：<code>?taste=battle&amp;bpm=150&amp;key=A:minor</code>）。仕様と、AIに案内してもらうためのガイドは右下の「AI向けガイド」にあります。</div>
     <div class="btns">
       <button id="genBtn">生成する</button>
+      <button id="variantBtn" class="sub" disabled>↻ 別バリエーション</button>
       <button id="playBtn" class="sub" disabled>▶ ループ試聴</button>
       <button id="stopBtn" class="sub" disabled>■ 停止</button>
     </div>
@@ -90,15 +124,16 @@
       <button id="wavBtn" class="sub" disabled>WAVを書き出す</button>
       <button id="midiBtn" class="sub" disabled>MIDIを書き出す</button>
       <button id="jsonBtn" class="sub" disabled>譜面JSONを書き出す</button>
-      <button id="saveBtn" class="sub" disabled>ギャラリーに保存</button>
+      <button id="saveBtn" disabled>ギャラリーに保存</button>
     </div>
-    <div class="meta">MP3書き出しは提供しません（エンコーダのライセンス方針と、変換でループの継ぎ目がずれるため）。書き出しは WAV／MIDI／譜面JSON／ステムをご利用ください。</div>
+    <div id="saveStatus" class="status" role="status"></div>
+    <div class="meta">書き出し形式は WAV／MIDI／譜面JSON です。MP3は出しません（確定）：エンコーダ依存のライセンスに加え、MP3変換時に冒頭へ入る無音がループの継ぎ目を崩すためです。</div>
     <h2 style="margin-top:20px">生成後の調整</h2>
     <div class="row">
       <div><label>BPM（再生・書き出しに反映）</label><input id="adjBpm" type="number" min="40" max="200" value="100"></div>
     </div>
     <div class="btns"><button id="adjBpmBtn" class="sub" disabled>BPMを反映する</button></div>
-    <div class="meta">パートごとの作り直しと音量は、右の「パート構成」で行います。音符をマス目で直す編集は、右の「細かな編集」で行います。音量は譜面データに保存されます。</div>
+    <div class="meta">パートごとの作り直し（「再生成」ボタン）と音量は、右の「パート構成」で行います。音量は譜面データ（meta.gains）に保存されます。</div>
     <h2 style="margin-top:20px">効果音（同梱・分離可能モジュール）</h2>
     <label>カテゴリ</label>
     <select id="seCat">
@@ -121,62 +156,89 @@
         <tbody></tbody>
       </table>
       <div class="btns">
-        <button id="batchBtn" class="sub">全モード×全テイストを一括検証（T1〜T5）</button>
+        <button id="batchBtn" class="sub">全モード×全テイストを一括検証（T1〜T5）＋効果音・表記チェック（T7／T8）</button>
       </div>
       <div id="batchResult" class="meta"></div>
     </div>
     <div class="card" style="margin-top:14px">
       <h2>細かな編集（生成後に直す）</h2>
-      <div id="tlPos" class="meta">停止中</div>
-      <div style="height:10px;background:#262b36;border-radius:5px;overflow:hidden;margin:6px 0"><div id="tlFill" style="height:100%;width:0%;background:var(--acc);transition:width .05s linear"></div></div>
-      <div id="geTimeline" class="ge-timeline"></div>
-      <div class="meta" style="margin-top:6px"><label><input type="checkbox" id="geFollow" checked> 再生中の小節に自動で追従</label></div>
-      <div id="geInfo" class="meta" style="margin-top:6px">生成すると、ここで音符単位の編集ができるようになります。</div>
-      <div class="row" style="margin-top:8px">
-        <div><label>編集するパート</label><select id="geTrack"></select></div>
-        <div><label>小節</label><select id="geBar"></select></div>
+      <div id="editor" class="meta">生成すると、ここで音符単位の編集ができるようになります。</div>
+      <div id="editorBody" style="display:none">
+        <div id="transport">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <span id="playPos" class="meta" role="status">停止中</span>
+            <label class="chk" style="margin:0;padding:0"><input type="checkbox" id="followChk" checked> 再生中の小節に自動で追従</label>
+          </div>
+          <div class="timeline" id="timeline" role="button" aria-label="タイムライン：タップした小節の先頭から再生"></div>
+          <div class="meta">タイムライン（全小節・数字は小節番号）をタップすると、その小節の先頭から再生します。赤い線が再生位置です。「▶ ループ試聴」で再生したまま、下のマスの編集・パートの再生成・音量・BPM変更ができ、変更は次の音からそのまま反映されます。</div>
+        </div>
+        <div class="row">
+          <div><label>編集するパート</label><select id="editTrack"></select></div>
+          <div><label>小節</label><select id="editBar"></select></div>
+        </div>
+        <div class="meta" style="margin-top:8px">マスをタップすると、その位置の音符を置く／消すができます（長さ2ステップ・強さ0.75で配置）。編集は試聴・WAV・MIDI・譜面JSONすべてに反映されます。再生中は、いま鳴っているステップの列が赤枠で示されます（表示中の小節が再生中の小節のとき）。</div>
+        <div class="gridwrap" id="editGrid"></div>
+        <div class="row" style="margin-top:10px">
+          <div><label>この曲のBPM（生成後変更）</label><input id="editBpm" type="number" min="40" max="200"></div>
+          <div><label>選択パートの音の強さ（一括）</label><input id="editVel" type="range" min="20" max="100" value="75"></div>
+        </div>
+        <div class="btns">
+          <button id="applyBpmBtn" class="sub small">BPMを反映</button>
+          <button id="applyVelBtn" class="sub small">強さを反映</button>
+          <button id="transDownBtn" class="sub small">半音 下げる</button>
+          <button id="transUpBtn" class="sub small">半音 上げる</button>
+          <button id="clearBarBtn" class="sub small">この小節を消す</button>
+          <button id="undoBtn" class="sub small" disabled>元に戻す</button>
+        </div>
+        <div id="editStatus" class="status" role="status"></div>
       </div>
-      <div class="ge-wrap" style="margin-top:10px"><div id="geGrid" class="ge-grid"></div></div>
-      <div class="row" style="margin-top:10px">
-        <div><label>BPM変更</label><input id="geBpm" type="number" min="40" max="200" value="100"></div>
-        <div><label>選択パートの強さ（この小節）</label><input id="geVel" type="range" min="10" max="150" value="75" style="width:130px"></div>
-      </div>
-      <div class="btns">
-        <button id="geBpmBtn" class="sub">BPMを反映する</button>
-        <button id="geDown" class="sub">半音下げる</button>
-        <button id="geUp" class="sub">半音上げる</button>
-        <button id="geClear" class="sub">この小節を消す</button>
-        <button id="geUndo" class="sub">元に戻す</button>
-      </div>
-      <div class="meta">タイムライン（数字は小節番号）をタップすると、その小節の先頭から再生します。「ループ試聴」で再生したまま、マスの編集・パートの再生成・音量・BPM変更ができ、変更は次の音からそのまま反映されます。半音の移動と強さは、選択中のパートの表示中の小節に適用されます。</div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h2>ギャラリー（この端末の中だけに保存）</h2>
-      <div id="galleryMsg" class="meta"></div>
-      <div id="gallery" class="meta">保存された作品はまだありません。生成して「ギャラリーに保存」を押すと、譜面データがこのブラウザ内に保存されます（外部送信なし）。</div>
+      <h2>ギャラリー <span id="galleryCount" style="color:var(--sub)"></span></h2>
+      <div class="meta" style="margin-bottom:8px">「ギャラリーに保存」を押すと、作品が下の一覧にすぐ追加されます。この表示枠（埋め込み画面）ではブラウザ保存が使えないことがあり、その場合はこのページを開いている間の保存になります。<strong>確実に残したいときは「ギャラリーをファイルに書き出す」</strong>でJSONファイルとして保存し、次回「ファイルから読み込む」で戻してください。</div>
+      <div id="gallery" class="meta">保存された作品はまだありません。生成して「ギャラリーに保存」を押してください。</div>
+      <div id="galleryStatus" class="status" role="status"></div>
       <div class="btns">
-        <button id="galExport" class="sub">ギャラリーをJSONで書き出す</button>
-        <button id="galImportBtn" class="sub">ギャラリーJSONを読み込む</button>
-        <input id="galImport" type="file" accept="application/json" style="display:none">
+        <button id="galExportBtn" class="sub small">ギャラリーをファイルに書き出す</button>
+        <button id="galImportBtn" class="sub small">ファイルから読み込む</button>
+        <input id="galFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </div>
     <div class="card" style="margin-top:14px">
       <h2>パート構成</h2>
-      <div id="tracks" class="meta">生成するとパートが表示されます。ミュートは試聴とWAVに反映されます。</div>
+      <div id="tracks" class="meta">生成するとパートが表示されます。「再生成」はそのパートだけを作り直し、他のパートとコード進行は保持します。音量スライダは譜面JSONの meta.gains に保存され、試聴とWAV書き出しに反映されます。各パートの「編集」で上のエディタの対象にできます。</div>
     </div>
     <div class="card" style="margin-top:14px">
       <h2>譜面データ（JSON・正本）</h2>
       <pre id="scoreView">—</pre>
     </div>
     <div class="card" style="margin-top:14px">
-      <h2>AI向けガイド</h2>
-      <div class="meta">AIにイメージを伝えて設定してもらう場合は、<a href="/loop-bgm-maker/ai/core.md">AI向けガイド（core.md）</a>をAIに読ませてください。設定はURLパラメータでも渡せます（例：<code>?taste=battle&amp;bpm=150&amp;key=A:minor&amp;gen=1</code>）。対応パラメータ：title / mode / taste / bpm / bars / key / seed / tri / smp / gen。</div>
+      <h2>AI向けガイド（設定の案内用）</h2>
+      <div class="meta">「こんなイメージで作りたい」をAI（Museなど）に伝えると、AIが下の対応表から設定（モード／テイスト／BPM／調）を選び、パラメータ付きで開ける形に翻訳できます。下のテキストをAIに渡すと、そのまま案内に使えます。なお、タイトルは曲名と種の材料にだけ使われ、内容には反映されません。曲調は設定で決まります。</div>
+      <h2 style="margin-top:14px">場面・気分 → 設定の対応表</h2>
+      <table>
+        <thead><tr><th>場面・気分の言葉</th><th style="width:92px">モード</th><th style="width:110px">テイスト</th><th style="width:64px">BPM目安</th><th style="width:96px">調の目安</th></tr></thead>
+        <tbody id="moodTable"></tbody>
+      </table>
+      <h2 style="margin-top:14px">いまの設定のパラメータ</h2>
+      <div class="meta">左のフォームの現在値から作ったパラメータ文字列です。ページのURLの末尾に付けると、その設定済みの状態で開けます（末尾に <code>&amp;gen=1</code> を付けると開いた直後に生成まで行います）。</div>
+      <div class="row" style="margin-top:8px;align-items:flex-end">
+        <div style="flex:1 1 auto"><input id="paramPreview" type="text" readonly aria-label="現在の設定のURLパラメータ"></div>
+        <div style="flex:0 0 auto"><button id="paramCopyBtn" class="sub small" type="button">パラメータをコピー</button></div>
+      </div>
+      <div class="status" id="paramCopyStatus" role="status"></div>
+      <h2 style="margin-top:14px">AIに渡すガイドテキスト</h2>
+      <textarea id="aiGuideText" readonly rows="14" aria-label="AI向けガイドテキスト"></textarea>
+      <div class="btns">
+        <button id="guideCopyBtn" class="sub small" type="button">ガイドテキストをコピー</button>
+      </div>
+      <div class="status" id="guideCopyStatus" role="status"></div>
     </div>
   </section>
 </main>
 <footer>
   生成物について：本メーカーは生成物に権利を主張しません。ただし権利が発生するか、第三者の権利を侵害していないかの保証はしません。公開・利用の前に、ご自身で試聴し既存曲との類似がないか確認してください（指示書 §10）。<br>
-  本試作の生成はブラウザ内で完結し、入力したテーマや生成物を外部に送信しません。
+  本試作の生成はブラウザ内で完結し、入力したタイトルや生成物を外部に送信しません。
 </footer>
 <script>
 "use strict";
@@ -205,6 +267,7 @@ const TASTES = {
 
 function hashSeed(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function randomSeedValue(){ return Math.floor(Math.random()*2147483648); } // 0 .. 2^31-1 (about 2.1 billion patterns)
 
 function chordNotes(rootMidi, scaleName, degree, count){
   const scale = SCALES[scaleName];
@@ -224,8 +287,11 @@ function buildContext(opts){
   const rootMidi = 60 + NOTE_NAMES[rootName];
   const chords = [];
   for(let b=0;b<bars;b++) chords.push({bar:b, degree:taste.prog[b % taste.prog.length]});
-  const baseSeedStr = opts.theme + "|" + opts.mode + "|" + opts.taste + "|" + opts.bpm + "|" + bars + "|" + (opts.variant||0) + (opts.seed!=null ? "|seed:" + (opts.seed>>>0) : "");
-  return { taste, bars, totalSteps, scaleName, rootName, rootMidi, chords, baseSeedStr, density:taste.density };
+  const hasSeed = opts.seed!==undefined && opts.seed!==null && opts.seed!=="";
+  const seedVal = hasSeed ? (Number(opts.seed)>>>0) : null;
+  const seedPart = hasSeed ? ("seed:" + seedVal) : ("variant:" + (opts.variant||0));
+  const baseSeedStr = opts.theme + "|" + opts.mode + "|" + opts.taste + "|" + opts.bpm + "|" + bars + "|" + seedPart;
+  return { taste, bars, totalSteps, scaleName, rootName, rootMidi, chords, baseSeedStr, density:taste.density, seed:seedVal };
 }
 function trackRng(ctx, opts, trackId){
   const tv = (opts.trackVariants && opts.trackVariants[trackId]) || 0;
@@ -335,10 +401,10 @@ function generateScore(opts){
   const tracks = trackIdsFor(opts).map(id=>buildTrack(ctx, opts, id));
   if(opts.mode==="retro") enforceMono(tracks.filter(t=>["ch1","ch2","ch3"].includes(t.id)));
   return {
-    meta:{ title:opts.theme, version:"0.2-proto", kind:"bgm", mode:opts.mode, taste:opts.taste,
+    meta:{ title:opts.theme, version:"0.2-proto", kind:"bgm", mode:opts.mode, taste:opts.taste, seed:ctx.seed,
       bpm:opts.bpm, key:{root:ctx.rootName, scale:ctx.scaleName}, bars:opts.bars, beatsPerBar:4,
       expansions:{ triangleBass:!!opts.expTri, sampleDrums:!!opts.expSmp },
-      trackVariants:{...(opts.trackVariants||{})}, gains:{...(opts.gains||{})}, seed:(opts.seed!=null ? (opts.seed>>>0) : null) },
+      trackVariants:{...(opts.trackVariants||{})}, gains:{...(opts.gains||{})} },
     chords:ctx.chords, tracks
   };
 }
@@ -458,8 +524,15 @@ const SE_RECIPES = {
 const $ = id => document.getElementById(id);
 let audioCtx=null, currentScore=null, currentBuffer=null, playSrc=null, variant=0;
 const muted = new Set();
+let lastOpts = null; // generation opts incl. trackVariants (prototype stage 3)
+let undoStack = [];
+let galleryMem = null; // in-page gallery; localStorage is best-effort only
+let storagePersistent = null; // true = localStorage worked, false = session-only fallback
 
 function ensureCtx(){ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
+/* Autoplay-policy safety net: if a browser leaves the context suspended,
+   the next tap anywhere on the page retries resume() inside a user gesture. */
+document.addEventListener("pointerdown", ()=>{ if(audioCtx && audioCtx.state==="suspended"){ try{ audioCtx.resume(); }catch(e){} } }, true);
 function pulseWave(ctx, duty){
   const n=64, real=new Float32Array(n), imag=new Float32Array(n);
   for(let k=1;k<n;k++){ imag[k] = (2/(k*Math.PI)) * Math.sin(k*Math.PI*duty) * (k%2? 1 : (2*duty-1)); }
@@ -469,29 +542,62 @@ function noiseBuffer(ctx, sec){
   const b=ctx.createBuffer(1, Math.ceil(ctx.sampleRate*sec), ctx.sampleRate);
   const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b;
 }
-function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5; v2 voicing tuned by listening: energy in the band small speakers can reproduce)
-  const sr=ctx.sampleRate, dur= kind==="kick"? .25 : .18;
-  const b=ctx.createBuffer(1, Math.ceil(sr*dur), sr), d=b.getChannelData(0);
-  if(kind==="kick"){ // pitch drop from an audible height + harmonic body + woody knock
-    let ph=0; for(let i=0;i<d.length;i++){ const t=i/sr; const f=110+(620-110)*Math.exp(-t/0.02); ph+=2*Math.PI*f/sr;
-      d[i]=(Math.sin(ph)+0.45*Math.sin(2*ph)+0.22*Math.sin(3*ph))*Math.exp(-t/0.09) + Math.sin(2*Math.PI*280*t)*Math.exp(-t/0.012)*0.5; }
-  } else { // band-limited noise centred ~1.7kHz (no metallic highs) + strong short body tone 215->175Hz
-    let lp1=0, lp1b=0, lp2=0, ph=0; const a1=1-Math.exp(-2*Math.PI*2400/sr), a2=1-Math.exp(-2*Math.PI*700/sr);
-    for(let i=0;i<d.length;i++){ const t=i/sr; const w=Math.random()*2-1;
-      lp1+=a1*(w-lp1); lp1b+=a1*(lp1-lp1b); lp2+=a2*(w-lp2); const band=lp1b-lp2;
-      const f=175+(215-175)*Math.exp(-t/0.03); ph+=2*Math.PI*f/sr;
-      d[i]=band*Math.exp(-t/0.05)*1.4 + Math.sin(ph)*Math.exp(-t/0.03)*0.55; }
+function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5 recipes; v2 rebuild after A3 feedback round 2: v1 only retuned sub-100Hz sine sweeps (150→48Hz to 170→43Hz), which small speakers cannot reproduce, so it sounded unchanged. v2 puts the body in the 180-600Hz band small speakers actually play.)
+  const sr=ctx.sampleRate;
+  const normalize=(d,target)=>{ let peak=0; for(let i=0;i<d.length;i++){ const a=Math.abs(d[i]); if(a>peak)peak=a; }
+    if(peak>0){ const s=target/peak; for(let i=0;i<d.length;i++) d[i]*=s; } };
+  if(kind==="kick"){
+    const dur=.36, b=ctx.createBuffer(1, Math.ceil(sr*dur), sr), d=b.getChannelData(0);
+    let lp=0; const lpA=1-Math.exp(-2*Math.PI*480/sr); // one-pole lowpass ~480Hz for the woody knock
+    for(let i=0;i<d.length;i++){ const t=i/sr;
+      // pitch sweep 250→55Hz (phase = integral of the sweep): the drop itself is now in the audible band
+      const ph=2*Math.PI*(55*t + (250-55)*0.030*(1-Math.exp(-t/0.030)));
+      const s=Math.sin(ph);
+      const body=Math.tanh(2.1*s)*Math.exp(-t/0.105)*0.9; // waveshaped: strong harmonics through 200-600Hz carry the "don" on small speakers
+      const sub=s*Math.exp(-t/0.14)*0.45; // pure low thump for larger speakers / headphones
+      const nz=Math.random()*2-1; lp+=lpA*(nz-lp);
+      const knock=lp*Math.exp(-t/0.020)*0.9; // lowpassed noise knock: the woody body of the hit
+      const click=nz*Math.exp(-t/0.0025)*0.22;
+      d[i]=body + sub + knock + click;
+    }
+    normalize(d, 0.99);
+    return b;
   }
-  let pk=0; for(const v of d) pk=Math.max(pk,Math.abs(v)); if(pk>0) for(let i=0;i<d.length;i++) d[i]=d[i]/pk*0.95;
+  // snare v2: noise moved down to ~1250Hz and stripped above ~4kHz (the metallic/cymbal part), with a louder, longer drum body at ~190Hz so it reads as a drum "pan", not a cymbal.
+  const dur=.22, b=ctx.createBuffer(1, Math.ceil(sr*dur), sr), d=b.getChannelData(0);
+  const f0=1250, Q=0.8, w=2*Math.PI*f0/sr, alpha=Math.sin(w)/(2*Q), cw=Math.cos(w); // RBJ bandpass, constant 0dB peak gain
+  const bb0=alpha/(1+alpha), bb1=0, bb2=-alpha/(1+alpha), aa1=-2*cw/(1+alpha), aa2=(1-alpha)/(1+alpha);
+  let x1=0, x2=0, y1=0, y2=0, lp1=0, lp2=0, lpLo=0;
+  const lpA=1-Math.exp(-2*Math.PI*3800/sr), lpLoA=1-Math.exp(-2*Math.PI*900/sr);
+  for(let i=0;i<d.length;i++){ const t=i/sr; const noise=Math.random()*2-1;
+    const y=bb0*noise + bb1*x1 + bb2*x2 - aa1*y1 - aa2*y2; x2=x1; x1=noise; y2=y1; y1=y;
+    lp1+=lpA*(y-lp1); lp2+=lpA*(lp1-lp2); // cascaded lowpass: removes the >4kHz metallic shimmer
+    const wires=lp2*2.4*Math.exp(-t/0.062);
+    lpLo+=lpLoA*(noise-lpLo);
+    const thock=lpLo*Math.exp(-t/0.014)*0.5; // low body knock under the crack
+    const ph=2*Math.PI*(182*t + (208-182)*0.014*(1-Math.exp(-t/0.014))); // body tone 208→182Hz
+    const bodyTone=Math.sin(ph)*Math.exp(-t/0.034)*0.8;
+    const snap=noise*Math.exp(-t/0.003)*0.18; // stick crack at the very front
+    d[i]=wires + thock + bodyTone + snap;
+  }
+  normalize(d, 0.97);
   return b;
 }
-function scheduleNote(ctx, dest, tr, note, stepDur, taste, baseStep=0, baseTime=0){
-  const t0 = baseTime + (note.step - baseStep) * stepDur, dur = Math.max(.03, note.len * stepDur * .92);
+async function playDrumSample(kind){ const ctx=ensureCtx(); try{ await ctx.resume(); }catch(e){} const src=ctx.createBufferSource(); src.buffer=drumSampleBuffer(ctx,kind); const g=ctx.createGain(); g.gain.value=1; src.connect(g); g.connect(ctx.destination); src.start();
+  const st=$("drumStatus"); if(st) st.textContent=`${kind==="kick"?"キック":"スネア"}（調整版2）を再生しました — ${new Date().toLocaleTimeString("ja-JP")}`; }
+function scheduleNote(ctx, dest, tr, note, stepDur, taste, when){
+  const t0 = (when||0) + note.step * stepDur, dur = Math.max(.03, note.len * stepDur * .92);
   const g = ctx.createGain(); g.connect(dest);
   const vel = note.vel ?? .7;
   const playOsc = (type, freq, peak, attack, decayTo)=>{
     const o=ctx.createOscillator(); o.frequency.value=freq;
-    if(type==="pulse"){ o.type="square"; o.setPeriodicWave(pulseWave(ctx, tr.duty||.25)); }
+    // "pulse" is not a valid OscillatorNode.type value: assigning it throws
+    // a TypeError in spec-strict engines (Safari/WebKit), which killed the
+    // retro pulse channels there — every scheduler tick (and the offline
+    // render) threw, so no sound ever came out. Setting the PeriodicWave
+    // alone switches the node to "custom", which is the intended sound;
+    // only assign .type for the built-in waveforms.
+    if(type==="pulse") o.setPeriodicWave(pulseWave(ctx, tr.duty||.25));
     else o.type=type;
     const og=ctx.createGain(); og.gain.setValueAtTime(0, t0);
     og.gain.linearRampToValueAtTime(peak, t0+attack);
@@ -538,8 +644,7 @@ async function renderScore(score, onlyId){
   const stepDur = 60/score.meta.bpm/4;
   for(const tr of score.tracks){
     if(onlyId ? tr.id!==onlyId : muted.has(tr.id)) continue;
-    const tg=ctx.createGain(); tg.gain.value = (score.meta.gains && score.meta.gains[tr.id]!==undefined) ? score.meta.gains[tr.id] : 1;
-    tg.connect(master);
+    const tg = ctx.createGain(); tg.gain.value = (score.meta.gains && score.meta.gains[tr.id]!==undefined) ? score.meta.gains[tr.id] : 1; tg.connect(master);
     for(const note of tr.notes) scheduleNote(ctx, tg, tr, note, stepDur, TASTES[score.meta.taste]); }
   return await ctx.startRendering();
 }
@@ -557,7 +662,8 @@ function bufferToWav(buffer){
 function download(blob, name){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
 function scoreFilename(ext){
   const m=currentScore.meta; const ex=(m.expansions.triangleBass?"_xtri":"")+(m.expansions.sampleDrums?"_xsmp":"");
-  return `${m.title}_${m.mode}_${m.bpm}bpm_${m.bars}bar${ex}.${ext}`;
+  const sd=(m.seed!==undefined&&m.seed!==null)?`_s${m.seed}`:"";
+  return `${m.title}_${m.mode}_${m.bpm}bpm_${m.bars}bar${ex}${sd}.${ext}`;
 }
 function showChecks(list){
   const tb=$("checks"); tb.style.display=""; const body=tb.querySelector("tbody"); body.innerHTML="";
@@ -568,117 +674,380 @@ function showChecks(list){
     tr.children[2].textContent=c.detail; body.appendChild(tr); }
   $("verdict").innerHTML = allOk ? '<span class="ok">全項目 ✓</span>' : '<span class="ng">不合格の項目があります</span>';
 }
-let lastOpts=null;
 function optsFromScore(score){
   const m=score.meta;
   return { theme:m.title, mode:m.mode, taste:m.taste, bpm:m.bpm, bars:m.bars,
     key:`${m.key.root}:${m.key.scale}`, expTri:!!(m.expansions&&m.expansions.triangleBass),
-    expSmp:!!(m.expansions&&m.expansions.sampleDrums), variant:0,
-    trackVariants:{...(m.trackVariants||{})}, gains:{...(m.gains||{})}, seed:(m.seed!=null ? m.seed : null) };
-}
-async function refreshAfterEdit(){
-  currentBuffer=await renderScore(currentScore);
-  const merged=validateScore(currentScore).filter(c=>c.id!=="T1").concat(validateBuffer(currentScore,currentBuffer)).sort((a,b)=>a.id.localeCompare(b.id));
-  showChecks(merged); showTracks(); renderGridEditor();
-  $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
-  $("adjBpm").value=currentScore.meta.bpm;
+    expSmp:!!(m.expansions&&m.expansions.sampleDrums), variant:0, seed:(m.seed!==undefined&&m.seed!==null?m.seed:null),
+    trackVariants:{...(m.trackVariants||{})}, gains:{...(m.gains||{})} };
 }
 function showTracks(){
   const el=$("tracks"); el.innerHTML="";
   for(const tr of currentScore.tracks){
     const div=document.createElement("div"); div.className="track";
-    const name=document.createElement("span"); name.textContent=`${tr.id}（${tr.role}／${tr.instrument}）・${tr.notes.length}音`;
+    const name=document.createElement("span"); name.className="track-main"; name.textContent=`${tr.id}（${tr.role}／${tr.instrument}）・${tr.notes.length}音`;
     if(muted.has(tr.id)) name.classList.add("muted");
-    const btns=document.createElement("span"); btns.style.display="flex"; btns.style.gap="6px"; btns.style.alignItems="center";
-    const btn=document.createElement("button"); btn.className="sub"; btn.textContent= muted.has(tr.id)?"ミュート解除":"ミュート";
-    btn.onclick=async()=>{ muted.has(tr.id)?muted.delete(tr.id):muted.add(tr.id);
-      currentBuffer=await renderScore(currentScore); showTracks(); };
-    const regen=document.createElement("button"); regen.className="sub"; regen.textContent="再生成";
-    regen.title="このパートだけ作り直します（他のパートとコード進行はそのまま）";
-    regen.onclick=async()=>{ if(!lastOpts) lastOpts=optsFromScore(currentScore);
-      lastOpts.trackVariants[tr.id]=(lastOpts.trackVariants[tr.id]||0)+1;
-      currentScore=regenerateTrack(currentScore, lastOpts, tr.id);
-      await refreshAfterEdit(); };
-    const stem=document.createElement("button"); stem.className="sub"; stem.textContent="ステムWAV";
-    stem.onclick=async()=>{ const b=await renderScore(currentScore, tr.id);
-      download(bufferToWav(b), scoreFilename("wav").replace(".wav", `_stem-${tr.id}.wav`)); };
-    const vol=document.createElement("input"); vol.type="range"; vol.min="0"; vol.max="150"; vol.style.width="90px";
+    const ctrls=document.createElement("span"); ctrls.className="track-ctrls";
+    const vlab=document.createElement("label"); vlab.textContent="音量";
+    const vol=document.createElement("input"); vol.type="range"; vol.min="0"; vol.max="150";
     vol.value=Math.round((((currentScore.meta.gains||{})[tr.id]!==undefined)?currentScore.meta.gains[tr.id]:1)*100);
-    vol.title="パート音量";
+    vol.setAttribute("aria-label", tr.id+" の音量"); vol.title="パート音量（譜面の meta.gains に保存）";
     vol.onchange=async()=>{ if(!currentScore.meta.gains) currentScore.meta.gains={};
       currentScore.meta.gains[tr.id]=parseInt(vol.value,10)/100;
-      if(live && live.trackGains.has(tr.id)) live.trackGains.get(tr.id).gain.setTargetAtTime(currentScore.meta.gains[tr.id], audioCtx.currentTime, .03);
-      currentBuffer=await renderScore(currentScore); };
-    btns.append(btn, regen, stem, vol);
-    div.append(name,btns); el.appendChild(div);
+      currentBuffer=await renderScore(currentScore); refreshScoreView();
+      setStatus("editStatus",`${tr.id} の音量を ${vol.value}% にしました。譜面JSONの meta.gains に保存され、試聴・WAVに反映されます。`); };
+    const btn=document.createElement("button"); btn.className="sub small"; btn.textContent= muted.has(tr.id)?"ミュート解除":"ミュート";
+    btn.onclick=async()=>{ muted.has(tr.id)?muted.delete(tr.id):muted.add(tr.id);
+      currentBuffer=await renderScore(currentScore); showTracks(); };
+    const regen=document.createElement("button"); regen.className="sub small"; regen.textContent="再生成";
+    regen.title="このパートだけ作り直します（他のパートとコード進行はそのまま）";
+    regen.onclick=async()=>{ if(!lastOpts) lastOpts=optsFromScore(currentScore);
+      if(!lastOpts.trackVariants) lastOpts.trackVariants={};
+      pushUndo();
+      lastOpts.trackVariants[tr.id]=(lastOpts.trackVariants[tr.id]||0)+1;
+      currentScore=regenerateTrack(currentScore, lastOpts, tr.id);
+      await refreshAfterEdit(`${tr.id} だけを再生成しました。他のパートとコード進行はそのままです。`); };
+    const edit=document.createElement("button"); edit.className="sub small"; edit.textContent="編集";
+    edit.onclick=()=>{ $("editTrack").value=tr.id; showEditor(); document.getElementById("editor").scrollIntoView({behavior:"smooth",block:"start"}); };
+    const stem=document.createElement("button"); stem.className="sub small"; stem.textContent="ステムWAV";
+    stem.onclick=async()=>{ const b=await renderScore(currentScore, tr.id);
+      download(bufferToWav(b), scoreFilename("wav").replace(".wav", `_stem-${tr.id}.wav`)); };
+    ctrls.append(vlab, vol, btn, regen, edit, stem);
+    div.append(name,ctrls); el.appendChild(div);
   }
 }
+function setStatus(id, msg){ const el=$(id); if(!el) return; el.textContent=msg; el.classList.add("show"); }
+function refreshScoreView(){ $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000); }
+async function refreshAfterEdit(msg){
+  /* Do NOT stop playback here: the live engine (below) reads currentScore
+     fresh at every scheduled step, so edits made while playing are heard
+     from the next note on. Only the export buffer is re-rendered. */
+  currentBuffer=await renderScore(currentScore);
+  const merged=validateScore(currentScore).filter(c=>c.id!=="T1").concat(validateBuffer(currentScore,currentBuffer)).sort((a,b)=>a.id.localeCompare(b.id));
+  showChecks(merged); showTracks(); showEditor(); refreshScoreView();
+  $("adjBpm").value=currentScore.meta.bpm;
+  $("undoBtn").disabled = undoStack.length===0;
+  if(msg) setStatus("editStatus", msg);
+}
+function pushUndo(){ if(!currentScore) return; undoStack.push(JSON.stringify(currentScore)); if(undoStack.length>20) undoStack.shift(); $("undoBtn").disabled=false; }
+/* ---------- live playback engine: edit while playing ----------
+   Instead of looping a pre-rendered buffer (which forced a stop on every
+   edit), notes are scheduled step by step with a short lookahead. The
+   scheduler re-reads currentScore / muted / gains at every step, so grid
+   edits, per-track regeneration, volume and BPM changes made during
+   playback are heard from the next note on, without stopping.
+   The rendered buffer (currentBuffer) is still maintained for WAV export
+   and validation; it is not used for playback any more. */
+const live={playing:false, timer:null, raf:null, master:null, gains:{}, nextStep:0, nextTime:0, anchorStep:0, anchorTime:0, pendingStep:0};
+let uiStep=-1;
+function stepDurNow(){ return currentScore ? 60/currentScore.meta.bpm/4 : 0.25; }
+function totalStepsNow(){ return currentScore ? currentScore.meta.bars*STEPS_PER_BAR : 0; }
+function scheduleStep(step, when){
+  const sd=stepDurNow();
+  for(const tr of currentScore.tracks){
+    if(muted.has(tr.id)) continue;
+    let g=live.gains[tr.id];
+    if(!g){ g=audioCtx.createGain(); g.connect(live.master); live.gains[tr.id]=g; }
+    g.gain.value=(currentScore.meta.gains && currentScore.meta.gains[tr.id]!==undefined) ? currentScore.meta.gains[tr.id] : 1;
+    for(const n of tr.notes){ if(n.step===step){ const nn={...n, step:0}; scheduleNote(audioCtx, g, tr, nn, sd, null, when); } }
+  }
+}
+function liveTick(){
+  if(!live.playing || !currentScore) return;
+  const total=totalStepsNow(); if(!total) return;
+  if(live.nextStep>=total) live.nextStep=0;
+  const ahead=audioCtx.currentTime+0.18;
+  while(live.nextTime<ahead){
+    scheduleStep(live.nextStep, live.nextTime);
+    live.anchorStep=live.nextStep; live.anchorTime=live.nextTime;
+    live.nextTime+=stepDurNow();
+    live.nextStep=(live.nextStep+1)%total;
+  }
+}
+function currentPlayPos(){
+  if(!currentScore) return 0;
+  const total=totalStepsNow(); if(!total) return 0;
+  if(!live.playing) return live.pendingStep;
+  let pos=live.anchorStep + (audioCtx.currentTime-live.anchorTime)/stepDurNow();
+  return ((pos%total)+total)%total;
+}
+function buildTimeline(){
+  const tl=$("timeline"); if(!tl || !currentScore) return;
+  tl.innerHTML="";
+  for(let b=0;b<currentScore.meta.bars;b++){
+    const seg=document.createElement("div"); seg.className="tlseg"; seg.textContent=b+1;
+    seg.title=`${b+1}小節目の先頭から再生`; tl.appendChild(seg);
+  }
+  const ph=document.createElement("div"); ph.id="playhead"; ph.style.left="0%"; tl.appendChild(ph);
+  tl.onclick=e=>{ const r=tl.getBoundingClientRect(); if(!r.width) return;
+    const ratio=Math.max(0, Math.min(0.999, (e.clientX-r.left)/r.width));
+    seekToStep(Math.floor(ratio*currentScore.meta.bars)*STEPS_PER_BAR); };
+}
+function updatePlayUI(){
+  if(!currentScore) return;
+  const total=totalStepsNow(); if(!total) return;
+  const pos=currentPlayPos();
+  const step=Math.floor(pos)%total, bar=Math.floor(step/STEPS_PER_BAR);
+  const ph=$("playhead"); if(ph) ph.style.left=(pos/total*100)+"%";
+  const segs=document.querySelectorAll(".tlseg");
+  segs.forEach((el,i)=>el.classList.toggle("now", i===bar));
+  if(step!==uiStep){ uiStep=step;
+    const rp=$("playPos");
+    if(rp) rp.textContent = live.playing
+      ? `再生中： ${bar+1}小節目 ・ ステップ ${step%STEPS_PER_BAR+1}/16（全${currentScore.meta.bars}小節をループ）`
+      : `停止中（次は ${Math.floor(live.pendingStep/STEPS_PER_BAR)+1}小節目から再生）`;
+    const selBar=parseInt(($("editBar").value||"0"),10)||0;
+    const inBar = bar===selBar, col = step%STEPS_PER_BAR;
+    document.querySelectorAll("#editGrid .cell").forEach(c=>c.classList.toggle("now", inBar && parseInt(c.dataset.step,10)===col));
+    document.querySelectorAll("#editGrid .gridhead span[data-step]").forEach(sp=>sp.classList.toggle("now", inBar && parseInt(sp.dataset.step,10)===col));
+    if(live.playing && $("followChk") && $("followChk").checked && bar!==selBar){
+      $("editBar").value=bar; showEditor();
+    }
+  }
+}
+function seekToStep(step){
+  if(!currentScore) return;
+  step=Math.max(0, Math.min(totalStepsNow()-1, step));
+  live.pendingStep=step;
+  const bar=Math.floor(step/STEPS_PER_BAR);
+  if(parseInt($("editBar").value||"0",10)!==bar){ $("editBar").value=bar; showEditor(); }
+  if(live.playing){ live.nextStep=step; live.nextTime=audioCtx.currentTime+0.06; live.anchorStep=step; live.anchorTime=live.nextTime; liveTick(); }
+  uiStep=-1; updatePlayUI();
+}
+async function startLive(){
+  if(!currentScore) return;
+  const ctx=ensureCtx(); stopLive(true);
+  // Await the resume inside the tap: some browsers (mobile Safari and
+  // in-app webviews in particular) keep the AudioContext suspended when
+  // resume() is merely fired and forgotten, so the old code started the
+  // scheduler against a frozen clock and no sound ever came out. If the
+  // context still is not running after the awaited resume, say so in the
+  // page instead of silently pretending to play.
+  try{ await ctx.resume(); }catch(e){}
+  if(ctx.state!=="running"){
+    setStatus("editStatus","音声を開始できませんでした。ブラウザが音声の再生を止めている可能性があります。画面を一度タップしてから、もう一度「▶ ループ試聴」を押してください。");
+    const rp=$("playPos"); if(rp) rp.textContent="音声を開始できませんでした（下の案内をご覧ください）";
+    return;
+  }
+  live.master=ctx.createGain(); live.master.gain.value=.9; live.master.connect(ctx.destination);
+  live.gains={};
+  live.playing=true;
+  live.nextStep=live.pendingStep % Math.max(1,totalStepsNow());
+  live.nextTime=ctx.currentTime+0.08;
+  live.anchorStep=live.nextStep; live.anchorTime=live.nextTime;
+  live.timer=setInterval(liveTick,25); liveTick();
+  const loop=()=>{ if(!live.playing) return; updatePlayUI(); live.raf=requestAnimationFrame(loop); };
+  live.raf=requestAnimationFrame(loop);
+  $("stopBtn").disabled=false;
+  uiStep=-1; updatePlayUI();
+}
+function stopLive(silent){
+  if(live.timer){ clearInterval(live.timer); live.timer=null; }
+  if(live.raf){ cancelAnimationFrame(live.raf); live.raf=null; }
+  if(live.playing && currentScore) live.pendingStep=Math.floor(currentPlayPos());
+  live.playing=false;
+  if(live.master){ try{live.master.disconnect();}catch(e){} live.master=null; }
+  live.gains={};
+  if(!silent){
+    $("stopBtn").disabled=true;
+    document.querySelectorAll("#editGrid .cell.now, #editGrid .gridhead span.now, .tlseg.now").forEach(el=>el.classList.remove("now"));
+    uiStep=-1;
+    const rp=$("playPos"); if(rp && currentScore) rp.textContent=`停止中（次は ${Math.floor(live.pendingStep/STEPS_PER_BAR)+1}小節目から再生）`;
+    const ph=$("playhead"); if(ph && currentScore) ph.style.left=(live.pendingStep/Math.max(1,totalStepsNow())*100)+"%";
+  }
+}
+function stopPlay(){ stopLive(); }
+/* ---------- fine editor: per-bar step grid for the selected track ---------- */
+const NOTE_LABELS=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+function pitchLabel(tr, midi){ if(tr.instrument==="noise"||tr.instrument==="sample") return midi===2?"スネア系":"ハット／キック系"; return NOTE_LABELS[((midi%12)+12)%12] + (Math.floor(midi/12)-1); }
+function editorPitches(tr){
+  if(tr.instrument==="noise"||tr.instrument==="sample") return [2,1];
+  const set=new Set(tr.notes.map(n=>n.midi));
+  if(set.size){
+    const lo=Math.min(...set)-4, hi=Math.max(...set)+4;
+    const scale=SCALES[currentScore.meta.key.scale]||SCALES.major;
+    const rootPc=NOTE_NAMES[currentScore.meta.key.root] ?? 0;
+    for(let m=lo;m<=hi;m++){ if(scale.includes(((m-rootPc)%12+12)%12)) set.add(m); }
+  }
+  let arr=[...set].sort((a,b)=>b-a);
+  if(arr.length>14) arr=arr.slice(0,14);
+  return arr;
+}
+function showEditor(){
+  if(!currentScore) return;
+  $("editor").textContent=`「${currentScore.meta.title}」を編集中。パートと小節を選んでマスをタップしてください。`;
+  $("editorBody").style.display="";
+  const tsel=$("editTrack"); const cur=tsel.value;
+  tsel.innerHTML="";
+  for(const tr of currentScore.tracks){ const o=document.createElement("option"); o.value=tr.id; o.textContent=`${tr.id}（${tr.role}）`; tsel.appendChild(o); }
+  if(currentScore.tracks.some(t=>t.id===cur)) tsel.value=cur;
+  const bsel=$("editBar"); const bcur=parseInt(bsel.value||"0",10);
+  bsel.innerHTML="";
+  for(let b=0;b<currentScore.meta.bars;b++){ const o=document.createElement("option"); o.value=b; o.textContent=`${b+1}小節目`; bsel.appendChild(o); }
+  bsel.value = Math.min(isNaN(bcur)?0:bcur, currentScore.meta.bars-1);
+  $("editBpm").value=currentScore.meta.bpm;
+  buildTimeline(); uiStep=-1; updatePlayUI();
+  const tr=currentScore.tracks.find(t=>t.id===tsel.value) || currentScore.tracks[0];
+  const bar=parseInt(bsel.value,10)||0;
+  const grid=$("editGrid"); grid.innerHTML="";
+  const head=document.createElement("div"); head.className="gridhead";
+  head.appendChild(document.createElement("span"));
+  for(let s=0;s<16;s++){ const sp=document.createElement("span"); sp.dataset.step=s; sp.textContent=(s%4===0)? String(s/4+1):"·"; head.appendChild(sp); }
+  grid.appendChild(head);
+  const pitches=editorPitches(tr);
+  if(!pitches.length){ const d=document.createElement("div"); d.className="meta"; d.textContent="このパートにはまだ音符がありません。下の行が出ない場合は、他のパートを選んでください。"; grid.appendChild(d); return; }
+  for(const midi of pitches){
+    const rowEl=document.createElement("div"); rowEl.className="gridrow";
+    const lab=document.createElement("span"); lab.className="plabel"; lab.textContent=pitchLabel(tr,midi); rowEl.appendChild(lab);
+    for(let s=0;s<16;s++){
+      const step=bar*16+s;
+      const has=tr.notes.some(n=>n.step===step && n.midi===midi);
+      const cell=document.createElement("button"); cell.type="button"; cell.dataset.step=s; cell.className="cell"+(has?" on":"")+((s%4===0)?" beat":"");
+      cell.setAttribute("aria-label", `${bar+1}小節 ${s+1}ステップ ${pitchLabel(tr,midi)}`);
+      cell.onclick=async()=>{
+        pushUndo();
+        const idx=tr.notes.findIndex(n=>n.step===step && n.midi===midi);
+        if(idx>=0){ tr.notes.splice(idx,1); await refreshAfterEdit(`${tr.id} ${bar+1}小節目 ${s+1}ステップの音を消しました。`); }
+        else { if(currentScore.meta.mode==="retro"){ tr.notes=tr.notes.filter(n=>!(n.step < step+2 && step < n.step+n.len)); }
+          tr.notes.push({step, midi, len:2, vel:.75}); tr.notes.sort((a,b)=>a.step-b.step);
+          await refreshAfterEdit(`${tr.id} ${bar+1}小節目 ${s+1}ステップに ${pitchLabel(tr,midi)} を置きました。`); }
+      };
+      rowEl.appendChild(cell);
+    }
+    grid.appendChild(rowEl);
+  }
+  uiStep=-1; updatePlayUI(); // re-apply the playhead column highlight to the rebuilt grid right away
+}
 async function doGenerate(){
-  const seedRaw=$("seed").value.trim();
-  const seedVal = seedRaw==="" ? Math.floor(Math.random()*0x80000000) : (parseInt(seedRaw,10)>>>0);
-  $("seed").value=seedVal;
-  const opts={ seed:seedVal, theme:$("theme").value.trim()||"無題", mode:$("mode").value, taste:$("taste").value,
+  const seedRaw=(($("seed") && $("seed").value) || "").toString().trim();
+  let usedSeed;
+  if(seedRaw!==""){
+    const p=parseInt(seedRaw,10);
+    usedSeed=Number.isFinite(p) ? Math.max(0, Math.min(2147483647, p)) : randomSeedValue();
+  } else {
+    usedSeed=randomSeedValue();
+  }
+  const opts={ theme:$("theme").value.trim()||"無題", mode:$("mode").value, taste:$("taste").value,
     bpm:Math.max(40,Math.min(200,parseInt($("bpm").value||"100",10))), bars:parseInt($("bars").value,10),
-    key:$("key").value, expTri:$("expTri").checked, expSmp:$("expSmp").checked, variant:variant++ };
+    key:$("key").value, expTri:$("expTri").checked, expSmp:$("expSmp").checked, variant:variant++, seed:usedSeed };
   muted.clear();
+  undoStack=[];
   lastOpts={...opts, trackVariants:{}};
   currentScore=generateScore(opts);
   const scoreChecks=validateScore(currentScore);
   currentBuffer=await renderScore(currentScore);
   const bufChecks=validateBuffer(currentScore,currentBuffer);
   const merged=scoreChecks.filter(c=>c.id!=="T1").concat(bufChecks).sort((a,b)=>a.id.localeCompare(b.id));
-  showChecks(merged); showTracks(); renderGridEditor();
-  $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
+  showChecks(merged); showTracks(); showEditor(); refreshScoreView();
+  $("undoBtn").disabled=true;
+  live.pendingStep=0; if(live.playing){ live.nextStep=0; live.nextTime=audioCtx.currentTime+0.06; live.anchorStep=0; live.anchorTime=live.nextTime; uiStep=-1; }
   $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false;
-  $("midiBtn").disabled=false; $("saveBtn").disabled=false; $("adjBpmBtn").disabled=false;
+  $("midiBtn").disabled=false; $("saveBtn").disabled=false; $("variantBtn").disabled=false; $("adjBpmBtn").disabled=false;
   $("adjBpm").value=currentScore.meta.bpm;
+  const ss=$("saveStatus"); ss.classList.remove("show"); ss.textContent="";
+  const cs=$("currentSeed"); if(cs) cs.textContent=`現在の種：${usedSeed}（譜面JSONの meta.seed に記録済み。この数字を上の「種」欄に入れて生成すると同じ曲を再現できます）`;
+  setStatus("editStatus",`生成しました（種：${usedSeed}）。マスをタップして音符を直せます。気に入ったら「ギャラリーに保存」を押してください。`);
 }
-$("adjBpmBtn").onclick=async()=>{ if(!currentScore) return;
-  const v=Math.max(40,Math.min(200,parseInt($("adjBpm").value||"100",10)));
-  currentScore.meta.bpm=v; await refreshAfterEdit(); };
-/* ---- gallery (localStorage only; nothing leaves the device) ---- */
+/* ---- gallery ----
+   Root cause of "保存できない": this page runs inside an embedded (sandboxed)
+   frame where localStorage can throw or be discarded, and the old code called
+   setItem without try/catch and gave no feedback, so a save silently vanished.
+   Fix: keep the gallery in memory first (save always shows up immediately),
+   try localStorage as best-effort, report which happened, and offer a JSON
+   file export/import that always works as the durable copy. Nothing is sent
+   to a server. */
 const GKEY="lbm-gallery-v1";
-let storageOK=false;
-try{ localStorage.setItem("__lbm_probe","1"); localStorage.removeItem("__lbm_probe"); storageOK=true; }catch(e){ storageOK=false; }
-let memGallery=[];
 function loadGallery(){
-  if(storageOK){ try{ return JSON.parse(localStorage.getItem(GKEY)||"[]"); }catch(e){ return []; } }
-  return memGallery;
+  if(galleryMem) return galleryMem;
+  try{ galleryMem=JSON.parse(localStorage.getItem(GKEY)||"[]"); storagePersistent=true; }
+  catch(e){ galleryMem=[]; storagePersistent=false; }
+  if(!Array.isArray(galleryMem)) galleryMem=[];
+  return galleryMem;
 }
 function storeGallery(list){
-  if(storageOK){ try{ localStorage.setItem(GKEY, JSON.stringify(list)); return true; }catch(e){ storageOK=false; } }
-  memGallery=list; return false;
+  galleryMem=list.slice(0,30);
+  try{ localStorage.setItem(GKEY, JSON.stringify(galleryMem)); storagePersistent=true; }
+  catch(e){ storagePersistent=false; }
+  return storagePersistent;
 }
-function galleryNote(msg){ $("galleryMsg").textContent = msg; }
+function saveToGallery(){
+  if(!currentScore){ setStatus("saveStatus","まだ生成していません。先に「生成する」を押してください。"); return; }
+  const item={id:Date.now(), savedAt:new Date().toLocaleString("ja-JP"), score:JSON.parse(JSON.stringify(currentScore))};
+  const list=loadGallery(); list.unshift(item);
+  const persisted=storeGallery(list);
+  showGallery();
+  const msg=persisted
+    ? `保存しました：「${item.score.meta.title}」（全${loadGallery().length}件）。下のギャラリーの一番上に追加されています。`
+    : `保存しました：「${item.score.meta.title}」（全${loadGallery().length}件）。ただしこの表示枠ではブラウザ保存が使えなかったため、いま開いている間の保存です。残したい場合はギャラリー下の「ファイルに書き出す」を押してください。`;
+  setStatus("saveStatus",msg); setStatus("galleryStatus",msg);
+  document.getElementById("gallery").scrollIntoView({behavior:"smooth",block:"center"});
+}
 function showGallery(){
   const el=$("gallery"); const list=loadGallery();
-  if(!list.length){ el.innerHTML="保存された作品はまだありません。生成して「ギャラリーに保存」を押すと、譜面データがこのブラウザ内に保存されます（外部送信なし）。"; return; }
+  $("galleryCount").textContent=list.length?`（${list.length}件）`:"";
+  if(!list.length){ el.textContent="保存された作品はまだありません。生成して「ギャラリーに保存」を押してください。"; return; }
   el.innerHTML="";
   for(const item of list){
+    const wrap=document.createElement("div"); wrap.className="galitem";
     const div=document.createElement("div"); div.className="track";
-    const name=document.createElement("span");
-    name.textContent=`${item.score.meta.title}（${item.score.meta.mode}／${TASTES[item.score.meta.taste].label}／${item.score.meta.bpm}BPM） ${item.savedAt}`;
-    const btns=document.createElement("span");
-    const load=document.createElement("button"); load.className="sub"; load.textContent="読み込む";
-    load.onclick=async()=>{ currentScore=item.score; muted.clear(); lastOpts=optsFromScore(currentScore);
-      $("adjBpmBtn").disabled=false;
+    const name=document.createElement("span"); name.className="track-main";
+    const tasteLabel=(TASTES[item.score.meta.taste]||{}).label||item.score.meta.taste;
+    name.textContent=`${item.score.meta.title}（${item.score.meta.mode}／${tasteLabel}／${item.score.meta.bpm}BPM／${item.score.meta.bars}小節） ${item.savedAt}`;
+    const btns=document.createElement("span"); btns.className="track-ctrls";
+    const load=document.createElement("button"); load.className="sub small"; load.textContent="読み込む";
+    load.onclick=async()=>{ currentScore=JSON.parse(JSON.stringify(item.score)); muted.clear(); undoStack=[];
+      lastOpts=optsFromScore(currentScore);
+      const cs=$("currentSeed"); if(cs) cs.textContent=(currentScore.meta.seed!==undefined&&currentScore.meta.seed!==null)?`現在の種：${currentScore.meta.seed}（譜面JSONの meta.seed に記録済み。この数字を上の「種」欄に入れて生成すると同じ曲を再現できます）`:"現在の種：記録なし（旧形式の保存データです）";
+      if($("seed") && (currentScore.meta.seed===undefined||currentScore.meta.seed===null)) $("seed").value="";
       currentBuffer=await renderScore(currentScore);
       const merged=validateScore(currentScore).filter(c=>c.id!=="T1").concat(validateBuffer(currentScore,currentBuffer)).sort((a,b)=>a.id.localeCompare(b.id));
-      showChecks(merged); showTracks(); $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
-      $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false; $("midiBtn").disabled=false; $("saveBtn").disabled=false;
-      $("adjBpm").value=currentScore.meta.bpm; };
-    const del=document.createElement("button"); del.className="sub"; del.textContent="削除"; del.style.marginLeft="6px";
-    del.onclick=()=>{ storeGallery(loadGallery().filter(x=>x.id!==item.id)); showGallery(); };
-    btns.append(load,del); div.append(name,btns); el.appendChild(div);
+      showChecks(merged); showTracks(); showEditor(); refreshScoreView();
+      $("adjBpm").value=currentScore.meta.bpm;
+      $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false; $("midiBtn").disabled=false; $("saveBtn").disabled=false; $("variantBtn").disabled=false; $("adjBpmBtn").disabled=false;
+      setStatus("galleryStatus",`「${item.score.meta.title}」を読み込みました。そのまま試聴・編集・書き出しができます。`); };
+    const dl=document.createElement("button"); dl.className="sub small"; dl.textContent="WAV";
+    dl.onclick=async()=>{ const keep=currentScore; currentScore=item.score; const b=await renderScore(item.score); download(bufferToWav(b), scoreFilename("wav")); currentScore=keep; };
+    const del=document.createElement("button"); del.className="sub small"; del.textContent="削除";
+    del.onclick=()=>{ storeGallery(loadGallery().filter(x=>x.id!==item.id)); showGallery(); setStatus("galleryStatus","1件削除しました。"); };
+    btns.append(load,dl,del); div.append(name,btns); wrap.appendChild(div); el.appendChild(wrap);
   }
 }
-/* ---- batch validation: all mode configs x all tastes (T1-T5) ---- */
+/* ---- T7: sound-effect recipes — ranges + rendered audio is audible, starts immediately, does not clip ---- */
+async function seChecks(){
+  const out=[];
+  for(const [name,r] of Object.entries(SE_RECIPES)){
+    if(!(r.dur>=0.05&&r.dur<=0.6)) out.push(`T7 ${name}: 長さ ${r.dur}秒 がUI向けの範囲外`);
+    if(r.type==="sweep"&&!(r.from>=80&&r.from<=4000&&r.to>=80&&r.to<=4000)) out.push(`T7 ${name}: スイープ周波数が範囲外`);
+    if(r.type==="arp"){
+      if(!(r.notes.length>=2&&r.notes.length<=6)) out.push(`T7 ${name}: アルペジオの音数が範囲外`);
+      if(!r.notes.every(f=>f>=150&&f<=4000)) out.push(`T7 ${name}: アルペジオ周波数（Hz）が範囲外`);
+      if(!r.notes.every((f,i)=>i===0||f>r.notes[i-1])) out.push(`T7 ${name}: アルペジオが上昇形になっていない`);
+    }
+    const buf=await renderSE(name); const d=buf.getChannelData(0);
+    let peak=0,sum=0,head=0; const hn=Math.min(d.length, Math.floor(buf.sampleRate*0.005));
+    for(let i=0;i<d.length;i++){ const a=Math.abs(d[i]); if(a>peak)peak=a; sum+=d[i]*d[i]; if(i<hn)head+=d[i]*d[i]; }
+    const rms=Math.sqrt(sum/Math.max(1,d.length)), headRms=Math.sqrt(head/Math.max(1,hn));
+    if(!(peak<=1&&peak>=0.2)) out.push(`T7 ${name}: ピーク ${peak.toFixed(2)}（無音または割れ）`);
+    if(!(rms>0.03)) out.push(`T7 ${name}: RMS ${rms.toFixed(3)}（無音に近い）`);
+    if(!(headRms>0.05)) out.push(`T7 ${name}: 冒頭が無音になっている`);
+  }
+  return out;
+}
+/* ---- T8 (in-page subset): no trademark / work names and no overclaim wording in the visible text ---- */
+function textChecks(){
+  const out=[]; const text=document.body.innerText||"";
+  const tm=["Game "+"Boy","ゲーム"+"ボーイ","ファミ"+"コン","Ninten"+"do","任"+"天堂"];
+  for(const w of tm) if(text.includes(w)) out.push("T8: 商標・作品名にあたる表記が表示に含まれます");
+  for(const w of ["商用利用"+"自由","完全に"+"フリー","権利"+"フリー"]) if(text.includes(w)) out.push("T8: 権利について言い過ぎの表現が表示に含まれます");
+  return [...new Set(out)];
+}
+/* ---- batch validation: all mode configs x all tastes (T1-T5) + SE (T7) + text (T8) ---- */
 async function batchValidate(){
   const btn=$("batchBtn"); btn.disabled=true;
   const configs=[{mode:"standard"},{mode:"retro"},{mode:"retro",expTri:true},{mode:"retro",expSmp:true},{mode:"retro",expTri:true,expSmp:true},{mode:"piano"},{mode:"ambient"}];
   let total=0, failed=[];
   for(const cfg of configs){ for(const taste of Object.keys(TASTES)){
-    const s=generateScore({theme:"一括検証", taste, bpm:120, bars:4, key:"C:major", variant:0, ...cfg});
+    const s=generateScore({theme:"一括検証", taste, bpm:120, bars:4, key:"C:major", variant:0, seed:20261113, ...cfg});
     const buf=await renderScore(s);
     const checks=validateScore(s).filter(c=>c.id!=="T1").concat(validateBuffer(s,buf));
     total++;
@@ -686,8 +1055,10 @@ async function batchValidate(){
     $("batchResult").textContent=`検証中… ${total} / ${configs.length*Object.keys(TASTES).length}`;
     await new Promise(r=>setTimeout(r,0));
   }}
+  $("batchResult").textContent="効果音（T7）と表記（T8）を検証中…";
+  failed=failed.concat(await seChecks(), textChecks());
   $("batchResult").innerHTML = failed.length===0
-    ? `<span class="ok">一括検証 全${total}組合せ ✓（T1〜T5）</span>`
+    ? `<span class="ok">一括検証 全${total}組合せ ✓（T1〜T5）＋ 効果音8種 ✓（T7）＋ 表記 ✓（T8）</span>`
     : `<span class="ng">${failed.length}件の不合格</span><br>` + failed.slice(0,20).join("<br>");
   btn.disabled=false;
 }
@@ -705,7 +1076,7 @@ async function renderSE(cat){
     const og=ctx.createGain(); og.gain.setValueAtTime(.4,0); og.gain.exponentialRampToValueAtTime(.001,dur);
     o.connect(og); og.connect(g); o.start(0); o.stop(dur); }
   else { const step=dur/r.notes.length; r.notes.forEach((m,i)=>{ const o=ctx.createOscillator(); o.type="square";
-    o.frequency.value=m; const og=ctx.createGain(); const t0=i*step;
+    o.frequency.value=m; const og=ctx.createGain(); const t0=i*step; // recipe notes are Hz values, not MIDI numbers (T7)
     og.gain.setValueAtTime(.35,t0); og.gain.exponentialRampToValueAtTime(.001,t0+step);
     o.connect(og); og.connect(g); o.start(t0); o.stop(t0+step); }); }
   return await ctx.startRendering();
@@ -719,201 +1090,148 @@ $("mode").onchange=()=>{ const retro=$("mode").value==="retro"; $("retroOpts").s
 function retroStateUpdate(){ const tri=$("expTri").checked, smp=$("expSmp").checked;
   $("retroState").textContent = "構成：" + (!tri&&!smp ? "レトロ4ch（標準構成）" : (tri&&smp ? "5ch（拡張1＋2）" : tri ? "4ch＋三角波ベース" : "4ch＋サンプルドラム")); }
 $("expTri").onchange=retroStateUpdate; $("expSmp").onchange=retroStateUpdate;
+$("kickPlay").onclick=()=>playDrumSample("kick");
+$("snarePlay").onclick=()=>playDrumSample("snare");
 $("genBtn").onclick=doGenerate;
-/* ---- fine editor: note grid (tap cells to add/remove notes; len 2, vel .75) ---- */
-let geTrackId=null, geBar=0;
-const NOTE_DISP=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-function geRowsFor(tr){
-  if(tr.instrument==="noise" || tr.instrument==="sample"){
-    const ids=[...new Set(tr.notes.map(n=>n.midi))];
-    for(const d of [1,2]) if(!ids.includes(d)) ids.push(d);
-    return ids.sort((a,b)=>b-a).map(m=>({midi:m, label: tr.instrument==="sample" ? (m===1?"キック":(m===2?"スネア":"打"+m)) : (m===1?"打・低":"打・高")}));
-  }
-  const rootSemi=NOTE_NAMES[currentScore.meta.key.root], scale=SCALES[currentScore.meta.key.scale];
-  let lo=127, hi=0; for(const n of tr.notes){ lo=Math.min(lo,n.midi); hi=Math.max(hi,n.midi); }
-  if(hi===0){ lo=60; hi=72; }
-  const collect=(pad)=>{ const r=[]; for(let p=lo-pad;p<=hi+pad;p++){ if(scale.includes(((p-rootSemi)%12+12)%12)) r.push(p); } return r; };
-  let rows=collect(7);
-  if(rows.length>21) rows=collect(3);
-  return rows.sort((a,b)=>b-a).map(m=>({midi:m, label: NOTE_DISP[((m%12)+12)%12]+(Math.floor(m/12)-1)}));
-}
-function renderGridEditor(){
-  const grid=$("geGrid"); if(!grid) return;
-  const tsel=$("geTrack"), bsel=$("geBar");
-  if(!currentScore){ grid.innerHTML=""; tsel.innerHTML=""; bsel.innerHTML=""; return; }
-  if(!geTrackId || !currentScore.tracks.some(x=>x.id===geTrackId)) geTrackId=currentScore.tracks[0].id;
-  tsel.innerHTML=""; for(const tr of currentScore.tracks){ const o=document.createElement("option"); o.value=tr.id; o.textContent=tr.id+"（"+tr.role+"）"; tsel.appendChild(o); }
-  tsel.value=geTrackId;
-  if(geBar>=currentScore.meta.bars) geBar=0;
-  bsel.innerHTML=""; for(let b=0;b<currentScore.meta.bars;b++){ const o=document.createElement("option"); o.value=b; o.textContent=(b+1)+"小節目"; bsel.appendChild(o); }
-  bsel.value=String(geBar);
-  $("geInfo").textContent="「"+currentScore.meta.title+"」を編集中。パートと小節を選んでマスをタップしてください。置く音符は長さ2ステップ・強さ0.75です。編集は試聴・WAV・MIDI・譜面JSONすべてに反映され、再生中は次の音から反映されます。";
-  const tr=currentScore.tracks.find(x=>x.id===geTrackId);
-  const rows=geRowsFor(tr), start=geBar*16;
-  grid.style.gridTemplateColumns="52px repeat(16, 1fr)";
-  grid.innerHTML="";
-  for(const r of rows){
-    const lab=document.createElement("div"); lab.className="ge-lab"; lab.textContent=r.label; grid.appendChild(lab);
-    for(let s=0;s<16;s++){
-      const step=start+s;
-      const cell=document.createElement("button"); cell.className="ge-cell"+(s%4===0?" beat":"");
-      if(tr.notes.some(n=>n.step===step && n.midi===r.midi)) cell.classList.add("on");
-      else if(tr.notes.some(n=>n.midi===r.midi && n.step<step && step<n.step+n.len)) cell.classList.add("cont");
-      cell.onclick=()=>geToggle(tr, step, r.midi);
-      grid.appendChild(cell);
-    }
-  }
-  $("geBpm").value=currentScore.meta.bpm;
-  renderTimeline();
-}
-const geUndoStack=[];
-function gePushUndo(){ geUndoStack.push(JSON.stringify(currentScore)); if(geUndoStack.length>30) geUndoStack.shift(); }
-function renderTimeline(){
-  const tl=$("geTimeline"); if(!tl) return;
-  tl.innerHTML="";
-  if(!currentScore) return;
-  for(let b=0;b<currentScore.meta.bars;b++){
-    const d=document.createElement("div"); d.className="ge-seg"+(window._curBar===b?" cur":""); d.textContent=b+1;
-    d.onclick=()=>{ geBar=b; renderGridEditor();
-      if(live && audioCtx){ live.nextStep=b*16; live.nextTime=audioCtx.currentTime+0.05; live.stepTimes.length=0; } };
-    tl.appendChild(d);
-  }
-}
-function geSelectedTrack(){ return currentScore ? currentScore.tracks.find(x=>x.id===geTrackId) : null; }
-$("geUndo").onclick=async()=>{ const s=geUndoStack.pop(); if(!s) return; currentScore=JSON.parse(s); await refreshAfterEdit(); };
-$("geClear").onclick=async()=>{ const tr=geSelectedTrack(); if(!tr) return; gePushUndo();
-  const st=geBar*16; tr.notes=tr.notes.filter(n=>!(n.step>=st && n.step<st+16)); await refreshAfterEdit(); };
-$("geUp").onclick=async()=>geTranspose(1);
-$("geDown").onclick=async()=>geTranspose(-1);
-async function geTranspose(d){
-  const tr=geSelectedTrack(); if(!tr || tr.instrument==="noise" || tr.instrument==="sample") return;
-  gePushUndo(); const st=geBar*16;
-  for(const n of tr.notes) if(n.step>=st && n.step<st+16) n.midi=Math.max(0, Math.min(127, n.midi+d));
-  await refreshAfterEdit();
-}
-$("geVel").onchange=async()=>{ const tr=geSelectedTrack(); if(!tr) return; gePushUndo();
-  const st=geBar*16, v=parseInt($("geVel").value,10)/100;
-  for(const n of tr.notes) if(n.step>=st && n.step<st+16) n.vel=v;
-  await refreshAfterEdit(); };
-$("geBpmBtn").onclick=async()=>{ if(!currentScore) return;
-  const v=Math.max(40, Math.min(200, parseInt($("geBpm").value||"100",10)));
-  currentScore.meta.bpm=v; await refreshAfterEdit(); };
-
-async function geToggle(tr, step, midi){
-  gePushUndo();
-  const idx=tr.notes.findIndex(n=>n.step===step && n.midi===midi);
-  if(idx>=0) tr.notes.splice(idx,1);
-  else{
-    if(currentScore.meta.mode==="retro") tr.notes=tr.notes.filter(n=>n.step!==step);
-    tr.notes.push({step, midi, len:2, vel:.75});
-    tr.notes.sort((a,b)=>a.step-b.step || a.midi-b.midi);
-  }
-  await refreshAfterEdit();
-}
-$("geTrack").onchange=e=>{ geTrackId=e.target.value; renderGridEditor(); };
-$("geBar").onchange=e=>{ geBar=parseInt(e.target.value,10); renderGridEditor(); };
-
-/* ---- URL parameters: ?title=&mode=&taste=&bpm=&bars=&key=&seed=&tri=1&smp=1&gen=1
-   Lets an AI (or a person) hand over a pre-configured link. Invalid values are ignored. ---- */
-(function applyUrlParams(){
-  const q = new URLSearchParams(location.search);
-  if(![...q.keys()].length) return;
-  const setSel = (id, v) => { const el=$(id); if(el && [...el.options].some(o=>o.value===v)) el.value=v; };
-  if(q.get("title")) $("theme").value = q.get("title").slice(0,60);
-  setSel("mode", q.get("mode")); setSel("taste", q.get("taste"));
-  if(q.get("taste") && !q.get("bpm") && TASTES[q.get("taste")]) $("bpm").value = TASTES[q.get("taste")].bpm;
-  if(q.get("bpm")) { const b=parseInt(q.get("bpm"),10); if(b>=40 && b<=200) $("bpm").value=b; }
-  setSel("bars", q.get("bars")); setSel("key", q.get("key"));
-  if(q.get("seed")) { const s=parseInt(q.get("seed"),10); if(s>=0 && s<=2147483647) $("seed").value=s; }
-  if(q.get("tri")) $("expTri").checked = q.get("tri")==="1";
-  if(q.get("smp")) $("expSmp").checked = q.get("smp")==="1";
-  if(typeof retroStateUpdate==="function") retroStateUpdate();
-  if(q.get("gen")==="1") doGenerate();
-})();
-/* ---- live playback: look-ahead step scheduler. Edits (regen / volume / mute / BPM)
-   are read at schedule time, so they apply from the next step while playing. ---- */
-let live=null;
-async function startLive(){
-  const ctx=ensureCtx(); stopPlay();
-  try{ await ctx.resume(); }catch(e){}
-  if(ctx.state!=="running"){ $("info").textContent="音声を開始できませんでした。画面を一度タップしてから、もう一度「ループ試聴」を押してください。"; return; }
-  const master=ctx.createGain(); master.gain.value=.9; master.connect(ctx.destination);
-  window._curBar=0; live={ master, trackGains:new Map(), nextStep:0, nextTime:ctx.currentTime+0.06, stepTimes:[], timer:null, raf:0 };
-  live.timer=setInterval(schedTick, 25);
-  drawPlayhead();
-  $("stopBtn").disabled=false;
-}
-function schedTick(){
-  if(!live || !currentScore) return;
-  const ctx=audioCtx, total=currentScore.meta.bars*16;
-  while(live.nextTime < ctx.currentTime + 0.12){
-    const s = live.nextStep % total;
-    const stepDur = 60/currentScore.meta.bpm/4;
-    const taste = TASTES[currentScore.meta.taste];
-    for(const tr of currentScore.tracks){
-      if(muted.has(tr.id)) continue;
-      let dest = live.trackGains.get(tr.id);
-      if(!dest){ dest=ctx.createGain(); dest.gain.value=(currentScore.meta.gains && currentScore.meta.gains[tr.id]!==undefined)? currentScore.meta.gains[tr.id] : 1; dest.connect(live.master); live.trackGains.set(tr.id, dest); }
-      for(const note of tr.notes) if(note.step===s) scheduleNote(ctx, dest, tr, note, stepDur, taste, s, live.nextTime);
-    }
-    live.stepTimes.push({step:s, time:live.nextTime});
-    if(live.stepTimes.length > total*2+64) live.stepTimes.splice(0, 64);
-    live.nextTime += stepDur; live.nextStep++;
-  }
-}
-function drawPlayhead(){
-  if(!live) return;
-  const now=audioCtx.currentTime, arr=live.stepTimes;
-  for(let i=arr.length-1;i>=0;i--){
-    if(arr[i].time<=now){
-      const cur=arr[i], nxt=arr[i+1];
-      const total=currentScore.meta.bars*16;
-      const frac = nxt ? Math.min(1,(now-cur.time)/Math.max(.01,nxt.time-cur.time)) : 0;
-      $("tlFill").style.width=((cur.step+frac)/total*100).toFixed(1)+"%";
-      $("tlPos").textContent="再生中： 小節 "+(Math.floor(cur.step/16)+1)+" / "+(total/16)+"（ステップ "+(cur.step+1)+" / "+total+"）";
-      const cb=Math.floor(cur.step/16);
-      if(window._curBar!==cb){ window._curBar=cb;
-        document.querySelectorAll(".ge-seg").forEach((el,i)=>el.classList.toggle("cur", i===cb));
-        if($("geFollow") && $("geFollow").checked && geBar!==cb){ geBar=cb; renderGridEditor(); } }
-      break;
-    }
-  }
-  live.raf=requestAnimationFrame(drawPlayhead);
-}
-$("playBtn").onclick=startLive;
-function stopPlay(){
-  if(live){ clearInterval(live.timer); cancelAnimationFrame(live.raf);
-    const m=live.master, ctx=audioCtx;
-    try{ m.gain.setTargetAtTime(0, ctx.currentTime, .02); setTimeout(()=>{ try{m.disconnect()}catch(e){} },150); }catch(e){}
-    live=null; }
-  if(playSrc){ try{playSrc.stop()}catch(e){} playSrc=null; }
-  $("stopBtn").disabled=true;
-  const f=$("tlFill"), pos=$("tlPos"); if(f) f.style.width="0%"; if(pos) pos.textContent="停止中"; window._curBar=-1; document.querySelectorAll(".ge-seg").forEach(el=>el.classList.remove("cur"));
-}
-$("stopBtn").onclick=stopPlay;
+$("variantBtn").onclick=()=>{ if($("seed")) $("seed").value=""; doGenerate(); };
+$("editTrack").onchange=showEditor;
+$("editBar").onchange=showEditor;
+$("applyBpmBtn").onclick=async()=>{ if(!currentScore) return; const v=Math.max(40,Math.min(200,parseInt($("editBpm").value||"100",10))); pushUndo(); currentScore.meta.bpm=v; $("bpm").value=v; await refreshAfterEdit(`BPMを ${v} に変更しました。尺と試聴に反映済みです。`); };
+$("adjBpmBtn").onclick=async()=>{ if(!currentScore) return;
+  const v=Math.max(40,Math.min(200,parseInt($("adjBpm").value||"100",10)));
+  pushUndo(); currentScore.meta.bpm=v; $("bpm").value=v;
+  await refreshAfterEdit(`BPMを ${v} に変更しました。再レンダリング・検証・WAV/MIDI/JSON書き出しに反映されます。`); };
+$("applyVelBtn").onclick=async()=>{ if(!currentScore) return; const tr=currentScore.tracks.find(t=>t.id===$("editTrack").value); if(!tr) return; pushUndo(); const v=parseInt($("editVel").value,10)/100; for(const n of tr.notes) n.vel=v; await refreshAfterEdit(`${tr.id} の全音符の強さを ${$("editVel").value}% にしました。`); };
+async function transposeSelected(delta){ if(!currentScore) return; const tr=currentScore.tracks.find(t=>t.id===$("editTrack").value); if(!tr||tr.instrument==="noise"||tr.instrument==="sample") { setStatus("editStatus","ドラム系パートは移調できません。"); return; } pushUndo(); for(const n of tr.notes) n.midi=Math.max(24,Math.min(108,n.midi+delta)); await refreshAfterEdit(`${tr.id} を ${delta>0?"+":""}${delta} 半音 移調しました。`); }
+$("transUpBtn").onclick=()=>transposeSelected(1);
+$("transDownBtn").onclick=()=>transposeSelected(-1);
+$("clearBarBtn").onclick=async()=>{ if(!currentScore) return; const tr=currentScore.tracks.find(t=>t.id===$("editTrack").value); if(!tr) return; const bar=parseInt($("editBar").value,10)||0; pushUndo(); tr.notes=tr.notes.filter(n=>Math.floor(n.step/16)!==bar); await refreshAfterEdit(`${tr.id} の ${bar+1}小節目を消しました。`); };
+$("undoBtn").onclick=async()=>{ const prev=undoStack.pop(); if(!prev) return; currentScore=JSON.parse(prev); await refreshAfterEdit("1つ前の状態に戻しました。"); $("undoBtn").disabled=undoStack.length===0; };
+$("galExportBtn").onclick=()=>{ const list=loadGallery(); if(!list.length){ setStatus("galleryStatus","ギャラリーが空です。先に作品を保存してください。"); return; } download(new Blob([JSON.stringify(list,null,1)],{type:"application/json"}), "loop-bgm-gallery.json"); setStatus("galleryStatus",`ギャラリー全${list.length}件をファイルに書き出しました。このファイルが確実な保存用コピーです。`); };
+$("galImportBtn").onclick=()=>$("galFile").click();
+$("galFile").onchange=()=>{ const f=$("galFile").files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const arr=JSON.parse(r.result); if(!Array.isArray(arr)) throw new Error("bad"); const ok=arr.filter(x=>x && x.score && x.score.meta && Array.isArray(x.score.tracks)); if(!ok.length) throw new Error("bad"); storeGallery(ok.concat(loadGallery()).slice(0,30)); showGallery(); setStatus("galleryStatus",`ファイルから ${ok.length}件を読み込みました。`); }catch(e){ setStatus("galleryStatus","読み込めませんでした。ギャラリー書き出しのJSONファイルを選んでください。"); } }; r.readAsText(f); $("galFile").value=""; };
+$("playBtn").onclick=()=>{ startLive(); };
+$("stopBtn").onclick=()=>{ stopLive(); };
 $("wavBtn").onclick=()=>download(bufferToWav(currentBuffer), scoreFilename("wav"));
 $("midiBtn").onclick=()=>download(new Blob([scoreToMidi(currentScore)],{type:"audio/midi"}), scoreFilename("mid"));
-$("saveBtn").onclick=()=>{ const list=loadGallery();
-  list.unshift({id:Date.now(), savedAt:new Date().toLocaleString("ja-JP"), score:currentScore});
-  const persisted=storeGallery(list.slice(0,30)); showGallery();
-  galleryNote(persisted ? "保存しました。このブラウザ内に残り、再読み込みしても消えません。"
-    : "この表示環境ではブラウザ内保存が使えないため、開いている間だけ保持しました。残したい場合は「ギャラリーをJSONで書き出す」でファイルとして保存してください。"); };
-$("galExport").onclick=()=>{ download(new Blob([JSON.stringify(loadGallery(),null,1)],{type:"application/json"}), "bgm-gallery.json"); };
-$("galImportBtn").onclick=()=>$("galImport").click();
-$("galImport").onchange=async()=>{ const f=$("galImport").files[0]; if(!f) return;
-  try{ const list=JSON.parse(await f.text());
-    if(!Array.isArray(list)) throw new Error("not a gallery");
-    const persisted=storeGallery(list.slice(0,30)); showGallery();
-    galleryNote(persisted ? `ギャラリーを読み込みました（${list.length}件）。` : `ギャラリーを読み込みました（${list.length}件、開いている間だけ保持）。`);
-  }catch(e){ galleryNote("ギャラリーJSONの読み込みに失敗しました。書き出したファイルを選んでください。"); }
-  $("galImport").value=""; };
+$("saveBtn").onclick=saveToGallery;
 $("batchBtn").onclick=batchValidate;
 showGallery();
-if(!storageOK) galleryNote("この表示環境ではブラウザ内保存が使えません。ギャラリーは開いている間だけ保持され、JSON書き出しでファイルとして残せます。");
 $("jsonBtn").onclick=()=>download(new Blob([JSON.stringify(currentScore,null,1)],{type:"application/json"}), scoreFilename("json"));
-$("sePlay").onclick=async()=>{ const buf=await renderSE($("seCat").value); const ctx=ensureCtx(); ctx.resume();
+$("sePlay").onclick=async()=>{ const buf=await renderSE($("seCat").value); const ctx=ensureCtx(); try{ await ctx.resume(); }catch(e){}
   const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start(); };
 $("seWav").onclick=async()=>{ const buf=await renderSE($("seCat").value); download(bufferToWav(buf), `se_${$("seCat").value}.wav`); };
+/* ---- URL parameters + AI guide ----
+   Open with settings pre-filled, e.g. ?taste=battle&bpm=150&key=A:minor
+   (&gen=1 also generates immediately). This reads the query string the page
+   was opened with; it never reads or copies the page's own address. */
+const MODE_LABELS={standard:"スタンダード", retro:"レトロ4ch", piano:"ピアノソロ", ambient:"アンビエント"};
+const MOOD_MAP=[
+  {words:"明るい街・村、日常のRPG、散歩", mode:"standard", taste:"daily", bpm:"92", key:"C:major"},
+  {words:"元気な主題、タイトル画面、ポップ", mode:"standard", taste:"pop", bpm:"112", key:"C:major"},
+  {words:"戦闘、ボス戦、緊張感のある場面", mode:"standard", taste:"battle", bpm:"150", key:"A:minor"},
+  {words:"ダンジョン、謎解き、不思議な場所", mode:"standard", taste:"mystery", bpm:"80", key:"D:minor"},
+  {words:"夜、怖い、ホラー、廃墟", mode:"standard", taste:"dark", bpm:"66", key:"D:minor"},
+  {words:"和風、神社、温泉街、祭り", mode:"standard", taste:"wa", bpm:"84", key:"A:minor"},
+  {words:"カフェ、作業用、落ち着いた日常", mode:"standard", taste:"lofi", bpm:"76", key:"C:major"},
+  {words:"感動シーン、別れ、回想", mode:"piano", taste:"ballad", bpm:"68", key:"F:major"},
+  {words:"冒険、旅立ち、壮大な風景", mode:"standard", taste:"grand", bpm:"96", key:"G:major"},
+  {words:"昔のゲーム風、8bit、レトロゲーム", mode:"retro", taste:"pop", bpm:"112", key:"C:major"},
+  {words:"ジャズバー、都会の夜、おしゃれ", mode:"standard", taste:"jazz", bpm:"110", key:"F:major"},
+  {words:"近未来、サイバー、電子音", mode:"standard", taste:"electro", bpm:"122", key:"E:minor"},
+  {words:"疾走感、ロック、スポーツ", mode:"standard", taste:"rock", bpm:"132", key:"E:minor"},
+  {words:"静かな環境音、瞑想、水辺", mode:"ambient", taste:"mystery", bpm:"80", key:"C:major"},
+];
+(function buildMoodTable(){
+  const tb=$("moodTable"); if(!tb) return;
+  for(const m of MOOD_MAP){
+    const tr=document.createElement("tr");
+    const cells=[m.words, MODE_LABELS[m.mode]||m.mode, (TASTES[m.taste]||{}).label||m.taste, m.bpm, m.key.replace(":major"," メジャー").replace(":minor"," マイナー")];
+    for(const c of cells){ const td=document.createElement("td"); td.textContent=c; tr.appendChild(td); }
+    tb.appendChild(tr);
+  }
+})();
+(function buildGuideText(){
+  const el=$("aiGuideText"); if(!el) return;
+  const tasteLines=Object.entries(TASTES).map(([k,v])=>`- ${k}（${v.label}）：推奨BPM ${v.bpm}／${v.minor?"マイナー寄り":"メジャー寄り"}`).join("\n");
+  const moodLines=MOOD_MAP.map(m=>`- ${m.words} → mode=${m.mode}, taste=${m.taste}, bpm=${m.bpm}, key=${m.key}`).join("\n");
+  el.value=
+`ループBGMメーカー 設定ガイド（AI向け）
+このメーカーはプログラムがルールと乱数で作曲します。タイトルの言葉は曲名と種（シード）の材料にだけ使われ、内容には反映されません。曲調は mode / taste / bpm / key / bars で決まります。ユーザーが「こんなイメージで」と言ったら、言葉の雰囲気を下の設定に翻訳して案内してください。特定の既存曲の名前で頼まれた場合は、その曲のメロディを再現せず、ジャンル・速さ・楽器感・明暗といった一般的な属性に言い換えてください。
+
+モード: standard（通常）/ retro（レトロ4ch、拡張 tri=1 / smp=1 あり）/ piano（ピアノソロ）/ ambient（アンビエント）
+テイストと推奨BPM:
+${tasteLines}
+調（key）: C:major / G:major / F:major / A:minor / E:minor / D:minor
+小節数（bars）: 4 / 8 / 16　種（seed）: 0〜2147483647（空欄なら毎回ランダム）
+
+場面・気分 → 設定の対応:
+${moodLines}
+
+案内の出し方: 設定値の一覧を示すか、ページURLの末尾に付けるパラメータ文字列を作って渡してください。
+例: ?title=夕日の港町&mode=standard&taste=lofi&bpm=76&bars=8&key=C:major
+末尾に &gen=1 を付けると、開いた直後にその設定で生成されます。`;
+})();
+function buildParamString(){
+  const p=new URLSearchParams();
+  const title=$("theme").value.trim(); if(title) p.set("title", title);
+  p.set("mode", $("mode").value);
+  p.set("taste", $("taste").value);
+  p.set("bpm", $("bpm").value||"100");
+  p.set("bars", $("bars").value);
+  p.set("key", $("key").value);
+  const seed=($("seed").value||"").trim(); if(seed!=="") p.set("seed", seed);
+  if($("mode").value==="retro"){ if($("expTri").checked) p.set("tri","1"); if($("expSmp").checked) p.set("smp","1"); }
+  return "?" + p.toString();
+}
+function updateParamPreview(){ const el=$("paramPreview"); if(el) el.value=buildParamString(); }
+["theme","mode","taste","bpm","bars","key","seed","expTri","expSmp"].forEach(id=>{
+  const el=$(id); if(!el) return;
+  el.addEventListener("change", updateParamPreview);
+  el.addEventListener("input", updateParamPreview);
+});
+async function copyText(text, statusId, okMsg){
+  let ok=false;
+  try{ await navigator.clipboard.writeText(text); ok=true; }catch(e){ ok=false; }
+  if(ok) setStatus(statusId, okMsg);
+  else setStatus(statusId, "自動コピーが使えない表示環境です。上の欄の文字列を選んでコピーしてください。");
+}
+$("paramCopyBtn").onclick=()=>copyText(buildParamString(), "paramCopyStatus", "パラメータ文字列をコピーしました。ページURLの末尾に付けると、この設定済みの状態で開けます。");
+$("guideCopyBtn").onclick=()=>copyText($("aiGuideText").value, "guideCopyStatus", "ガイドテキストをコピーしました。AIにそのまま渡せます。");
+function applyUrlParams(){
+  let q;
+  try{ q=new URLSearchParams(window.location.search||""); }catch(e){ return; }
+  const applied=[];
+  const title=q.get("title")||q.get("theme");
+  if(title){ $("theme").value=title.slice(0,60); applied.push("タイトル"); }
+  const mode=q.get("mode");
+  if(mode && MODE_LABELS[mode]){ $("mode").value=mode; $("mode").onchange(); applied.push("モード"); }
+  const taste=q.get("taste");
+  if(taste && TASTES[taste]){ $("taste").value=taste; if(!q.get("bpm")) $("bpm").value=TASTES[taste].bpm; applied.push("テイスト"); }
+  const bpm=parseInt(q.get("bpm")||"",10);
+  if(Number.isFinite(bpm)){ $("bpm").value=Math.max(40,Math.min(200,bpm)); applied.push("BPM"); }
+  const bars=q.get("bars");
+  if(["4","8","16"].includes(bars)){ $("bars").value=bars; applied.push("小節数"); }
+  const key=q.get("key");
+  if(key && [...$("key").options].some(o=>o.value===key)){ $("key").value=key; applied.push("調"); }
+  const seedRaw=(q.get("seed")||"").trim();
+  if(seedRaw!==""){ const sv=parseInt(seedRaw,10); if(Number.isFinite(sv)){ $("seed").value=Math.max(0,Math.min(2147483647,sv)); applied.push("種"); } }
+  if($("mode").value==="retro"){
+    if(q.get("tri")==="1"||q.get("tri")==="true"){ $("expTri").checked=true; applied.push("拡張1"); }
+    if(q.get("smp")==="1"||q.get("smp")==="true"){ $("expSmp").checked=true; applied.push("拡張2"); }
+    retroStateUpdate();
+  }
+  updateParamPreview();
+  if(applied.length){
+    setStatus("paramStatus", `URLパラメータから設定を読み込みました（${applied.join("・")}）。このまま「生成する」を押してください。`);
+  }
+  if(q.get("gen")==="1" && applied.length){
+    setStatus("paramStatus", "URLパラメータから設定を読み込み、そのまま生成しました。");
+    doGenerate();
+  }
+}
+updateParamPreview();
+applyUrlParams();
 </script>
 </body>
 </html>

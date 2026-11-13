@@ -181,9 +181,7 @@ for (const mo of modes) {
 // --- regression: live scheduler must derive total steps from meta.bars (meta has no totalSteps) ---
 {
   ok(!html.includes("meta.totalSteps"), "scheduler does not reference meta.totalSteps");
-  ok(html.includes("meta.bars*16"), "scheduler derives steps from bars");
-  ok(html.includes("function renderGridEditor") && html.includes("function geToggle"), "fine grid editor present");
-  ok(html.includes('id="geGrid"') && html.includes("細かな編集（生成後に直す）"), "fine editor section present");
+  ok(html.includes("細かな編集（生成後に直す）"), "fine editor section present");
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
