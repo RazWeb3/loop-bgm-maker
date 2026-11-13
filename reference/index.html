@@ -451,8 +451,9 @@ function scheduleNote(ctx, dest, tr, note, stepDur, taste, baseStep=0, baseTime=
   const g = ctx.createGain(); g.connect(dest);
   const vel = note.vel ?? .7;
   const playOsc = (type, freq, peak, attack, decayTo)=>{
-    const o=ctx.createOscillator(); o.type=type; o.frequency.value=freq;
-    if(type==="pulse") o.setPeriodicWave(pulseWave(ctx, tr.duty||.25));
+    const o=ctx.createOscillator(); o.frequency.value=freq;
+    if(type==="pulse"){ o.type="square"; o.setPeriodicWave(pulseWave(ctx, tr.duty||.25)); }
+    else o.type=type;
     const og=ctx.createGain(); og.gain.setValueAtTime(0, t0);
     og.gain.linearRampToValueAtTime(peak, t0+attack);
     og.gain.exponentialRampToValueAtTime(Math.max(.001, decayTo), t0+dur);
@@ -700,8 +701,10 @@ $("genBtn").onclick=doGenerate;
 /* ---- live playback: look-ahead step scheduler. Edits (regen / volume / mute / BPM)
    are read at schedule time, so they apply from the next step while playing. ---- */
 let live=null;
-function startLive(){
-  const ctx=ensureCtx(); ctx.resume(); stopPlay();
+async function startLive(){
+  const ctx=ensureCtx(); stopPlay();
+  try{ await ctx.resume(); }catch(e){}
+  if(ctx.state!=="running"){ $("info").textContent="音声を開始できませんでした。画面を一度タップしてから、もう一度「ループ試聴」を押してください。"; return; }
   const master=ctx.createGain(); master.gain.value=.9; master.connect(ctx.destination);
   live={ master, trackGains:new Map(), nextStep:0, nextTime:ctx.currentTime+0.06, stepTimes:[], timer:null, raf:0 };
   live.timer=setInterval(schedTick, 25);
