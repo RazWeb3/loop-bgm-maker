@@ -680,6 +680,23 @@ function retroStateUpdate(){ const tri=$("expTri").checked, smp=$("expSmp").chec
   $("retroState").textContent = "構成：" + (!tri&&!smp ? "レトロ4ch（標準構成）" : (tri&&smp ? "5ch（拡張1＋2）" : tri ? "4ch＋三角波ベース" : "4ch＋サンプルドラム")); }
 $("expTri").onchange=retroStateUpdate; $("expSmp").onchange=retroStateUpdate;
 $("genBtn").onclick=doGenerate;
+/* ---- URL parameters: ?title=&mode=&taste=&bpm=&bars=&key=&seed=&tri=1&smp=1&gen=1
+   Lets an AI (or a person) hand over a pre-configured link. Invalid values are ignored. ---- */
+(function applyUrlParams(){
+  const q = new URLSearchParams(location.search);
+  if(![...q.keys()].length) return;
+  const setSel = (id, v) => { const el=$(id); if(el && [...el.options].some(o=>o.value===v)) el.value=v; };
+  if(q.get("title")) $("theme").value = q.get("title").slice(0,60);
+  setSel("mode", q.get("mode")); setSel("taste", q.get("taste"));
+  if(q.get("taste") && !q.get("bpm") && TASTES[q.get("taste")]) $("bpm").value = TASTES[q.get("taste")].bpm;
+  if(q.get("bpm")) { const b=parseInt(q.get("bpm"),10); if(b>=40 && b<=200) $("bpm").value=b; }
+  setSel("bars", q.get("bars")); setSel("key", q.get("key"));
+  if(q.get("seed")) { const s=parseInt(q.get("seed"),10); if(s>=0 && s<=2147483647) $("seed").value=s; }
+  if(q.get("tri")) $("expTri").checked = q.get("tri")==="1";
+  if(q.get("smp")) $("expSmp").checked = q.get("smp")==="1";
+  if(typeof retroStateUpdate==="function") retroStateUpdate();
+  if(q.get("gen")==="1") doGenerate();
+})();
 /* ---- live playback: look-ahead step scheduler. Edits (regen / volume / mute / BPM)
    are read at schedule time, so they apply from the next step while playing. ---- */
 let live=null;
