@@ -710,7 +710,7 @@ function startLive(){
 }
 function schedTick(){
   if(!live || !currentScore) return;
-  const ctx=audioCtx, total=currentScore.meta.totalSteps;
+  const ctx=audioCtx, total=currentScore.meta.bars*16;
   while(live.nextTime < ctx.currentTime + 0.12){
     const s = live.nextStep % total;
     const stepDur = 60/currentScore.meta.bpm/4;
@@ -732,7 +732,7 @@ function drawPlayhead(){
   for(let i=arr.length-1;i>=0;i--){
     if(arr[i].time<=now){
       const cur=arr[i], nxt=arr[i+1];
-      const total=currentScore.meta.totalSteps;
+      const total=currentScore.meta.bars*16;
       const frac = nxt ? Math.min(1,(now-cur.time)/Math.max(.01,nxt.time-cur.time)) : 0;
       $("tlFill").style.width=((cur.step+frac)/total*100).toFixed(1)+"%";
       $("tlPos").textContent="再生中： 小節 "+(Math.floor(cur.step/16)+1)+" / "+(total/16)+"（ステップ "+(cur.step+1)+" / "+total+"）";

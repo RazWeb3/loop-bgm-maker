@@ -178,5 +178,11 @@ for (const mo of modes) {
   const r = regenerateTrack(a, { ...base, seed: a.meta.seed, trackVariants: { melody: 1 } }, "melody");
   ok(r.meta.seed === 123456789, "seed: preserved across track regeneration");
 }
+// --- regression: live scheduler must derive total steps from meta.bars (meta has no totalSteps) ---
+{
+  ok(!html.includes("meta.totalSteps"), "scheduler does not reference meta.totalSteps");
+  ok(html.includes("meta.bars*16"), "scheduler derives steps from bars");
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
+
