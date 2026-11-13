@@ -640,7 +640,7 @@ async function renderScore(score, onlyId){
   const sec = expectedSeconds(score);
   const sr = 44100;
   const ctx = new OfflineAudioContext(2, Math.round(sec*sr), sr);
-  const master = ctx.createGain(); master.gain.value=.8; master.connect(ctx.destination);
+  const master = ctx.createGain(); master.gain.value=.7; master.connect(ctx.destination);
   const stepDur = 60/score.meta.bpm/4;
   for(const tr of score.tracks){
     if(onlyId ? tr.id!==onlyId : muted.has(tr.id)) continue;
@@ -829,7 +829,7 @@ async function startLive(){
     const rp=$("playPos"); if(rp) rp.textContent="音声を開始できませんでした（下の案内をご覧ください）";
     return;
   }
-  live.master=ctx.createGain(); live.master.gain.value=.8; live.master.connect(ctx.destination);
+  live.master=ctx.createGain(); live.master.gain.value=.7; live.master.connect(ctx.destination);
   live.gains={};
   live.playing=true;
   live.nextStep=live.pendingStep % Math.max(1,totalStepsNow());
