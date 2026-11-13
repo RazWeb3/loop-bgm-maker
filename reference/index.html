@@ -26,6 +26,14 @@
   .ok{color:var(--ok)} .ng{color:var(--ng)}
   .meta{font-size:12px;color:var(--sub);line-height:1.7}
   .track{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:7px 0;font-size:13px}
+  .ge-wrap{overflow-x:auto}
+  .ge-grid{display:grid;gap:2px;min-width:640px}
+  .ge-cell{height:20px;background:#171b24;border:1px solid #232833;border-radius:3px;cursor:pointer;padding:0}
+  .ge-cell:hover{border-color:var(--acc)}
+  .ge-cell.on{background:var(--acc);border-color:var(--acc)}
+  .ge-cell.cont{background:#6d5322;border-color:#6d5322}
+  .ge-cell.beat{border-left:2px solid #39415a}
+  .ge-lab{font-size:11px;color:var(--mut);display:flex;align-items:center;justify-content:flex-end;padding-right:6px;height:20px}
   .track button{padding:4px 10px;font-size:12px}
   .track .muted{opacity:.45}
   pre{background:#0b0c0f;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11px;overflow:auto;max-height:220px}
@@ -88,7 +96,7 @@
       <div><label>BPM（再生・書き出しに反映）</label><input id="adjBpm" type="number" min="40" max="200" value="100"></div>
     </div>
     <div class="btns"><button id="adjBpmBtn" class="sub" disabled>BPMを反映する</button></div>
-    <div class="meta">パートごとの作り直しと音量は、右の「パート構成」で行います。音量は譜面データに保存されます。</div>
+    <div class="meta">パートごとの作り直しと音量は、右の「パート構成」で行います。音符をマス目で直す編集は、ページ下部の「細かな編集」で行います。音量は譜面データに保存されます。</div>
     <h2 style="margin-top:20px">効果音（同梱・分離可能モジュール）</h2>
     <label>カテゴリ</label>
     <select id="seCat">
@@ -116,6 +124,10 @@
       <div id="batchResult" class="meta"></div>
     </div>
     <div class="card" style="margin-top:14px">
+      <h2>パート構成</h2>
+      <div id="tracks" class="meta">生成するとパートが表示されます。ミュートは試聴とWAVに反映されます。</div>
+    </div>
+    <div class="card" style="margin-top:14px">
       <h2>ギャラリー（この端末の中だけに保存）</h2>
       <div id="galleryMsg" class="meta"></div>
       <div id="gallery" class="meta">保存された作品はまだありません。生成して「ギャラリーに保存」を押すと、譜面データがこのブラウザ内に保存されます（外部送信なし）。</div>
@@ -126,15 +138,21 @@
       </div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h2>パート構成</h2>
-      <div id="tracks" class="meta">生成するとパートが表示されます。ミュートは試聴とWAVに反映されます。</div>
-    </div>
-    <div class="card" style="margin-top:14px">
       <h2>譜面データ（JSON・正本）</h2>
       <pre id="scoreView">—</pre>
     </div>
   </section>
 </main>
+<section class="card" style="max-width:1180px;margin:0 auto 24px">
+  <h2>細かな編集（生成後に直す）</h2>
+  <div id="geInfo" class="meta">生成すると、ここで音符をマス目で直せます。パートと小節を選んでマスをタップすると、その位置の音符を置く／消すができます（置く音符は長さ2ステップ・強さ0.75）。編集は試聴・WAV・MIDI・譜面JSONすべてに反映され、再生中は次の音から反映されます。</div>
+  <div class="row" style="margin-top:8px">
+    <div><label>編集するパート</label><select id="geTrack"></select></div>
+    <div><label>小節</label><select id="geBar"></select></div>
+  </div>
+  <div class="ge-wrap" style="margin-top:10px"><div id="geGrid" class="ge-grid"></div></div>
+</section>
+
 <footer>
   生成物について：本メーカーは生成物に権利を主張しません。ただし権利が発生するか、第三者の権利を侵害していないかの保証はしません。公開・利用の前に、ご自身で試聴し既存曲との類似がないか確認してください（指示書 §10）。<br>
   本試作の生成はブラウザ内で完結し、入力したテーマや生成物を外部に送信しません。
@@ -540,7 +558,7 @@ function optsFromScore(score){
 async function refreshAfterEdit(){
   currentBuffer=await renderScore(currentScore);
   const merged=validateScore(currentScore).filter(c=>c.id!=="T1").concat(validateBuffer(currentScore,currentBuffer)).sort((a,b)=>a.id.localeCompare(b.id));
-  showChecks(merged); showTracks();
+  showChecks(merged); showTracks(); renderGridEditor();
   $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
   $("adjBpm").value=currentScore.meta.bpm;
 }
@@ -588,7 +606,7 @@ async function doGenerate(){
   currentBuffer=await renderScore(currentScore);
   const bufChecks=validateBuffer(currentScore,currentBuffer);
   const merged=scoreChecks.filter(c=>c.id!=="T1").concat(bufChecks).sort((a,b)=>a.id.localeCompare(b.id));
-  showChecks(merged); showTracks();
+  showChecks(merged); showTracks(); renderGridEditor();
   $("scoreView").textContent=JSON.stringify(currentScore,null,1).slice(0,6000);
   $("playBtn").disabled=false; $("wavBtn").disabled=false; $("jsonBtn").disabled=false;
   $("midiBtn").disabled=false; $("saveBtn").disabled=false; $("adjBpmBtn").disabled=false;
@@ -681,6 +699,63 @@ function retroStateUpdate(){ const tri=$("expTri").checked, smp=$("expSmp").chec
   $("retroState").textContent = "構成：" + (!tri&&!smp ? "レトロ4ch（標準構成）" : (tri&&smp ? "5ch（拡張1＋2）" : tri ? "4ch＋三角波ベース" : "4ch＋サンプルドラム")); }
 $("expTri").onchange=retroStateUpdate; $("expSmp").onchange=retroStateUpdate;
 $("genBtn").onclick=doGenerate;
+/* ---- fine editor: note grid (tap cells to add/remove notes; len 2, vel .75) ---- */
+let geTrackId=null, geBar=0;
+const NOTE_DISP=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+function geRowsFor(tr){
+  if(tr.instrument==="noise" || tr.instrument==="sample"){
+    const ids=[...new Set(tr.notes.map(n=>n.midi))];
+    for(const d of [1,2]) if(!ids.includes(d)) ids.push(d);
+    return ids.sort((a,b)=>b-a).map(m=>({midi:m, label: tr.instrument==="sample" ? (m===1?"キック":(m===2?"スネア":"打"+m)) : (m===1?"打・低":"打・高")}));
+  }
+  const rootSemi=NOTE_NAMES[currentScore.meta.key.root], scale=SCALES[currentScore.meta.key.scale];
+  let lo=127, hi=0; for(const n of tr.notes){ lo=Math.min(lo,n.midi); hi=Math.max(hi,n.midi); }
+  if(hi===0){ lo=60; hi=72; }
+  let rows=[];
+  for(let p=lo-12;p<=hi+12;p++){ if(scale.includes(((p-rootSemi)%12+12)%12)) rows.push(p); }
+  if(rows.length>25) rows=rows.filter(p=>p>=lo-7 && p<=hi+7);
+  return rows.sort((a,b)=>b-a).map(m=>({midi:m, label: NOTE_DISP[((m%12)+12)%12]+(Math.floor(m/12)-1)}));
+}
+function renderGridEditor(){
+  const grid=$("geGrid"); if(!grid) return;
+  const tsel=$("geTrack"), bsel=$("geBar");
+  if(!currentScore){ grid.innerHTML=""; tsel.innerHTML=""; bsel.innerHTML=""; return; }
+  if(!geTrackId || !currentScore.tracks.some(x=>x.id===geTrackId)) geTrackId=currentScore.tracks[0].id;
+  tsel.innerHTML=""; for(const tr of currentScore.tracks){ const o=document.createElement("option"); o.value=tr.id; o.textContent=tr.id+"（"+tr.role+"）"; tsel.appendChild(o); }
+  tsel.value=geTrackId;
+  if(geBar>=currentScore.meta.bars) geBar=0;
+  bsel.innerHTML=""; for(let b=0;b<currentScore.meta.bars;b++){ const o=document.createElement("option"); o.value=b; o.textContent=(b+1)+"小節目"; bsel.appendChild(o); }
+  bsel.value=String(geBar);
+  $("geInfo").textContent="「"+currentScore.meta.title+"」を編集中。パートと小節を選んでマスをタップしてください。置く音符は長さ2ステップ・強さ0.75です。編集は試聴・WAV・MIDI・譜面JSONすべてに反映され、再生中は次の音から反映されます。";
+  const tr=currentScore.tracks.find(x=>x.id===geTrackId);
+  const rows=geRowsFor(tr), start=geBar*16;
+  grid.style.gridTemplateColumns="46px repeat(16, 1fr)";
+  grid.innerHTML="";
+  for(const r of rows){
+    const lab=document.createElement("div"); lab.className="ge-lab"; lab.textContent=r.label; grid.appendChild(lab);
+    for(let s=0;s<16;s++){
+      const step=start+s;
+      const cell=document.createElement("button"); cell.className="ge-cell"+(s%4===0?" beat":"");
+      if(tr.notes.some(n=>n.step===step && n.midi===r.midi)) cell.classList.add("on");
+      else if(tr.notes.some(n=>n.midi===r.midi && n.step<step && step<n.step+n.len)) cell.classList.add("cont");
+      cell.onclick=()=>geToggle(tr, step, r.midi);
+      grid.appendChild(cell);
+    }
+  }
+}
+async function geToggle(tr, step, midi){
+  const idx=tr.notes.findIndex(n=>n.step===step && n.midi===midi);
+  if(idx>=0) tr.notes.splice(idx,1);
+  else{
+    if(currentScore.meta.mode==="retro") tr.notes=tr.notes.filter(n=>n.step!==step);
+    tr.notes.push({step, midi, len:2, vel:.75});
+    tr.notes.sort((a,b)=>a.step-b.step || a.midi-b.midi);
+  }
+  await refreshAfterEdit();
+}
+$("geTrack").onchange=e=>{ geTrackId=e.target.value; renderGridEditor(); };
+$("geBar").onchange=e=>{ geBar=parseInt(e.target.value,10); renderGridEditor(); };
+
 /* ---- URL parameters: ?title=&mode=&taste=&bpm=&bars=&key=&seed=&tri=1&smp=1&gen=1
    Lets an AI (or a person) hand over a pre-configured link. Invalid values are ignored. ---- */
 (function applyUrlParams(){
