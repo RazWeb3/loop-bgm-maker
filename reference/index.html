@@ -560,7 +560,7 @@ function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5 recip
       const click=nz*Math.exp(-t/0.0025)*0.22;
       d[i]=body + sub + knock + click;
     }
-    normalize(d, 0.99);
+    normalize(d, 0.60);
     return b;
   }
   // snare v2: noise moved down to ~1250Hz and stripped above ~4kHz (the metallic/cymbal part), with a louder, longer drum body at ~190Hz so it reads as a drum "pan", not a cymbal.
@@ -580,7 +580,7 @@ function drumSampleBuffer(ctx, kind){ // program-generated (instruction A5 recip
     const snap=noise*Math.exp(-t/0.003)*0.18; // stick crack at the very front
     d[i]=wires + thock + bodyTone + snap;
   }
-  normalize(d, 0.97);
+  normalize(d, 0.58);
   return b;
 }
 async function playDrumSample(kind){ const ctx=ensureCtx(); try{ await ctx.resume(); }catch(e){} const src=ctx.createBufferSource(); src.buffer=drumSampleBuffer(ctx,kind); const g=ctx.createGain(); g.gain.value=1; src.connect(g); g.connect(ctx.destination); src.start();
@@ -619,7 +619,7 @@ function scheduleNote(ctx, dest, tr, note, stepDur, taste, when){
       ng.gain.setValueAtTime(vel*.5,t0); ng.gain.exponentialRampToValueAtTime(.001,t0+nd);
       src.connect(f); f.connect(ng); ng.connect(g); src.start(t0); src.stop(t0+nd+.05); break; }
     case "sample": { const src=ctx.createBufferSource(); src.buffer=drumSampleBuffer(ctx, note.midi===1?"kick":"snare");
-      const sg=ctx.createGain(); sg.gain.value=vel*.9; src.connect(sg); sg.connect(g); src.start(t0); break; }
+      const sg=ctx.createGain(); sg.gain.value=vel*.8; src.connect(sg); sg.connect(g); src.start(t0); break; }
     case "piano": { const f0=freq(note.midi);
       [[1,.55],[2,.22],[3,.08]].forEach(([h,a])=>{ const o=ctx.createOscillator(); o.type="sine"; o.frequency.value=f0*h;
         const og=ctx.createGain(); og.gain.setValueAtTime(vel*a,t0); og.gain.exponentialRampToValueAtTime(.001,t0+Math.min(dur*1.6,.9));
